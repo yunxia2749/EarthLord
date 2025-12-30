@@ -6,8 +6,13 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A48592812EFF1E1F00549391 /* Untitled.swift in Sources */ = {isa = PBXBuildFile; fileRef = A48592802EFF1E1D00549391 /* Untitled.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		A47CB67D2EFBD1CC00C8F2C6 /* EarthLord.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EarthLord.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A48592802EFF1E1D00549391 /* Untitled.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Untitled.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -32,6 +37,7 @@
 		A47CB6742EFBD1CC00C8F2C6 = {
 			isa = PBXGroup;
 			children = (
+				A48592802EFF1E1D00549391 /* Untitled.swift */,
 				A47CB67F2EFBD1CC00C8F2C6 /* EarthLord */,
 				A47CB67E2EFBD1CC00C8F2C6 /* Products */,
 			);
@@ -65,6 +71,7 @@
 			);
 			name = EarthLord;
 			packageProductDependencies = (
+				051A70078DAD4260B3852F53 /* Supabase */,
 			);
 			productName = EarthLord;
 			productReference = A47CB67D2EFBD1CC00C8F2C6 /* EarthLord.app */;
@@ -94,6 +101,9 @@
 			);
 			mainGroup = A47CB6742EFBD1CC00C8F2C6;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A46E1C0C2EFFCA8100BDA370 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A47CB67E2EFBD1CC00C8F2C6 /* Products */;
 			projectDirPath = "";
@@ -119,6 +129,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A48592812EFF1E1F00549391 /* Untitled.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -261,6 +272,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -293,6 +305,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -332,6 +345,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A46E1C0C2EFFCA8100BDA370 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		051A70078DAD4260B3852F53 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A46E1C0C2EFFCA8100BDA370 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A47CB6752EFBD1CC00C8F2C6 /* Project object */;
 }
