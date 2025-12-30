@@ -17,6 +17,7 @@ enum ApocalypseTheme {
     // MARK: - 强调色
     static let primary = Color(red: 1.0, green: 0.4, blue: 0.1)            // 主题橙色
     static let primaryDark = Color(red: 0.8, green: 0.3, blue: 0.0)        // 深橙色
+    static let secondary = Color(red: 1.0, green: 0.6, blue: 0.2)          // 次要橙色（亮橙）
 
     // MARK: - 文字色
     static let textPrimary = Color.white                                    // 主文字

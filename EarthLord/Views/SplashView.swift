@@ -9,6 +9,9 @@ import SwiftUI
 
 /// 启动页视图
 struct SplashView: View {
+    /// 认证管理器
+    @StateObject private var authManager = AuthManager.shared
+
     /// 是否显示加载动画
     @State private var isAnimating = false
 
@@ -151,6 +154,12 @@ struct SplashView: View {
     // MARK: - 模拟加载
 
     private func simulateLoading() {
+        // 第一步：检查会话
+        Task {
+            loadingText = "正在检查登录状态..."
+            await authManager.checkSession()
+        }
+
         // 模拟加载过程
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             loadingText = "正在加载资源..."
