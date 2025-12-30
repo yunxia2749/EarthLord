@@ -278,7 +278,7 @@ class AuthManager: ObservableObject {
         isLoading = false
     }
 
-    // MARK: - 第三方登录（预留）
+    // MARK: - 第三方登录
 
     /// Apple 登录
     /// TODO: 实现 Apple 登录功能
@@ -289,11 +289,84 @@ class AuthManager: ObservableObject {
     }
 
     /// Google 登录
-    /// TODO: 实现 Google 登录功能
+    /// 使用 Google OAuth 进行登录，然后通过 Supabase 完成认证
     func signInWithGoogle() async {
-        // TODO: 集成 Google 登录
-        print("⚠️ Google 登录功能待实现")
-        errorMessage = "Google 登录功能暂未实现"
+        print("🚀 [认证] 开始Google登录流程")
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            // 1. 获取当前的视图控制器
+            print("📱 [认证] 获取当前视图控制器")
+            guard let viewController = await getRootViewController() else {
+                print("❌ [认证] 无法获取视图控制器")
+                errorMessage = "无法获取视图控制器"
+                isLoading = false
+                return
+            }
+
+            // 2. 执行 Google 登录，获取 ID Token
+            print("🔑 [认证] 调用Google登录SDK")
+            let idToken = try await GoogleSignInManager.shared.signIn(
+                presentingViewController: viewController
+            )
+
+            print("✅ [认证] 成功获取Google ID Token")
+
+            // 3. 使用 ID Token 通过 Supabase 登录
+            print("🔐 [认证] 使用ID Token登录Supabase")
+            let session = try await supabase.auth.signInWithIdToken(
+                credentials: .init(
+                    provider: .google,
+                    idToken: idToken
+                )
+            )
+
+            // 4. 登录成功
+            currentUser = session.user
+            isAuthenticated = true
+            needsPasswordSetup = false
+
+            print("✅ [认证] Google登录成功！")
+            print("📝 [认证] 用户ID: \(session.user.id)")
+            print("📝 [认证] 邮箱: \(session.user.email ?? "未知")")
+
+        } catch {
+            // 登录失败
+            print("❌ [认证] Google登录失败: \(error.localizedDescription)")
+
+            // 根据错误类型显示不同的提示
+            if let googleError = error as? GoogleSignInError {
+                errorMessage = googleError.localizedDescription
+            } else if error.localizedDescription.contains("cancelled") ||
+                      error.localizedDescription.contains("canceled") {
+                errorMessage = "登录已取消"
+                print("ℹ️ [认证] 用户取消了Google登录")
+            } else {
+                errorMessage = "Google登录失败: \(error.localizedDescription)"
+            }
+        }
+
+        isLoading = false
+        print("🏁 [认证] Google登录流程结束")
+    }
+
+    /// 获取根视图控制器
+    /// 用于展示 Google 登录界面
+    @MainActor
+    private func getRootViewController() async -> UIViewController? {
+        // 获取当前的 window scene
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene else {
+            return nil
+        }
+
+        // 获取 key window
+        guard let window = windowScene.windows.first(where: { $0.isKeyWindow }) else {
+            return nil
+        }
+
+        // 获取 root view controller
+        return window.rootViewController
     }
 
     // MARK: - 其他方法
@@ -323,6 +396,61 @@ class AuthManager: ObservableObject {
         }
 
         isLoading = false
+    }
+
+    /// 删除账户
+    /// ⚠️ 警告：此操作不可逆！会删除用户账户及所有相关数据
+    /// - Returns: 是否删除成功
+    func deleteAccount() async -> Bool {
+        print("🚨 [认证] 开始删除账户流程")
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            // 1. 获取当前用户的 access token
+            guard let session = try? await supabase.auth.session else {
+                print("❌ [认证] 无法获取会话信息")
+                errorMessage = "未登录或会话已过期"
+                isLoading = false
+                return false
+            }
+
+            let accessToken = session.accessToken
+            print("✅ [认证] 已获取访问令牌")
+
+            // 2. 调用 Edge Function 删除账户
+            print("🔗 [认证] 调用删除账户 Edge Function")
+
+            try await supabase.functions.invoke(
+                "delete-account",
+                options: FunctionInvokeOptions(
+                    method: .post,
+                    headers: ["Authorization": "Bearer \(accessToken)"]
+                )
+            )
+
+            print("✅ [认证] Edge Function 调用成功")
+            print("✅ [认证] 账户删除成功")
+
+            // 3. 清除本地状态
+            currentUser = nil
+            isAuthenticated = false
+            needsPasswordSetup = false
+            otpSent = false
+            otpVerified = false
+
+            print("✅ [认证] 本地状态已清除")
+
+            isLoading = false
+            return true
+
+        } catch {
+            // 删除失败
+            print("❌ [认证] 删除账户失败: \(error.localizedDescription)")
+            errorMessage = "删除账户失败: \(error.localizedDescription)"
+            isLoading = false
+            return false
+        }
     }
 
     /// 检查当前会话

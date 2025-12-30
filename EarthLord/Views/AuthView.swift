@@ -461,7 +461,12 @@ struct AuthView: View {
                     backgroundColor: .white,
                     foregroundColor: .black,
                     action: {
-                        showToastMessage("Google 登录即将开放")
+                        Task {
+                            await authManager.signInWithGoogle()
+                            if authManager.isAuthenticated {
+                                showToastMessage("Google 登录成功！")
+                            }
+                        }
                     }
                 )
             }
