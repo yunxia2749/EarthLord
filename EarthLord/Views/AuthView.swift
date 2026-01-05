@@ -838,7 +838,7 @@ enum ResetStep {
 
 /// Tab 按钮
 struct TabButton: View {
-    let title: String
+    let title: LocalizedStringKey
     let isSelected: Bool
     let action: () -> Void
 
@@ -955,7 +955,7 @@ struct CustomSecureField: View {
 
 /// 主要操作按钮
 struct PrimaryButton: View {
-    let title: String
+    let title: LocalizedStringKey
     let icon: String
     let action: () -> Void
     @Environment(\.isEnabled) var isEnabled
@@ -994,7 +994,7 @@ struct PrimaryButton: View {
 
 /// 第三方登录按钮
 struct ThirdPartyButton: View {
-    let title: String
+    let title: LocalizedStringKey
     let icon: String
     let backgroundColor: Color
     var foregroundColor: Color = .white

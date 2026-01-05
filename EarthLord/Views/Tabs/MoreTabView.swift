@@ -37,6 +37,19 @@ struct MoreTabView: View {
                         SectionHeader(title: "游戏功能")
 
                         VStack(spacing: 0) {
+                            NavigationLink(destination: LanguageSettingsView()) {
+                                MoreMenuItem(
+                                    icon: "globe",
+                                    title: "语言设置",
+                                    subtitle: "切换 App 显示语言",
+                                    iconColor: ApocalypseTheme.primary
+                                )
+                            }
+
+                            Divider()
+                                .background(ApocalypseTheme.background)
+                                .padding(.leading, 60)
+
                             MoreMenuItem(
                                 icon: "gearshape.fill",
                                 title: "设置",
@@ -73,7 +86,7 @@ struct MoreTabView: View {
 
 /// 分组标题
 struct SectionHeader: View {
-    let title: String
+    let title: LocalizedStringKey
 
     var body: some View {
         Text(title)
@@ -90,8 +103,8 @@ struct SectionHeader: View {
 /// 菜单项
 struct MoreMenuItem: View {
     let icon: String
-    let title: String
-    let subtitle: String
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
     let iconColor: Color
 
     var body: some View {
