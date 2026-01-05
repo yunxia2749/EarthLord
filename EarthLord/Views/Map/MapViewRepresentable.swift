@@ -20,6 +20,12 @@ struct MapViewRepresentable: UIViewRepresentable {
     /// 是否已完成首次居中
     @Binding var hasLocatedUser: Bool
 
+    /// 路径坐标数组（圈地轨迹）
+    @Binding var pathCoordinates: [CLLocationCoordinate2D]
+
+    /// 路径更新版本号
+    @Binding var pathUpdateVersion: Int
+
     // MARK: - UIViewRepresentable
 
     /// 创建MKMapView
@@ -45,9 +51,10 @@ struct MapViewRepresentable: UIViewRepresentable {
         return mapView
     }
 
-    /// 更新视图（不需要实现）
+    /// 更新视图
     func updateUIView(_ uiView: MKMapView, context: Context) {
-        // 空实现即可，Coordinator会处理位置更新
+        // ⭐ 关键：当路径坐标更新时，重新绘制轨迹
+        context.coordinator.updateTrackingPath(on: uiView, coordinates: pathCoordinates)
     }
 
     /// 创建协调器
@@ -130,5 +137,65 @@ struct MapViewRepresentable: UIViewRepresentable {
         func mapViewDidFinishLoadingMap(_ mapView: MKMapView) {
             // 地图初次加载完成
         }
+
+        // MARK: - Path Tracking
+
+        /// 更新追踪路径
+        /// - Parameters:
+        ///   - mapView: 地图视图
+        ///   - coordinates: 路径坐标数组（WGS-84）
+        func updateTrackingPath(on mapView: MKMapView, coordinates: [CLLocationCoordinate2D]) {
+            // 移除旧的路径覆盖层
+            let oldOverlays = mapView.overlays.filter { $0 is MKPolyline }
+            mapView.removeOverlays(oldOverlays)
+
+            // 如果没有坐标点，直接返回
+            guard coordinates.count >= 2 else {
+                return
+            }
+
+            print("\n🎨 [地图渲染] ========== 绘制路径 ==========")
+            print("📍 [地图渲染] 原始坐标点数: \(coordinates.count)")
+
+            // ⭐ iOS MapKit 在中国已使用 GCJ-02 坐标系，无需转换
+            // CoreLocation 返回的坐标已经是 GCJ-02，直接使用即可
+            print("✅ [地图渲染] 直接使用原始坐标（iOS 已自动处理）")
+
+            // 创建 MKPolyline（路径线）
+            var mutableCoordinates = coordinates
+            let polyline = MKPolyline(coordinates: &mutableCoordinates, count: coordinates.count)
+
+            // ⭐ 添加覆盖层到地图
+            mapView.addOverlay(polyline)
+
+            print("✅ [地图渲染] 路径已添加到地图")
+            print("🎨 [地图渲染] ========== 绘制完成 ==========\n")
+        }
+
+        /// ⭐ 关键方法：渲染覆盖层（绘制路径线条）
+        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            // 如果是路径线
+            if let polyline = overlay as? MKPolyline {
+                print("🖌️  [地图渲染] 创建路径渲染器")
+
+                let renderer = MKPolylineRenderer(polyline: polyline)
+
+                // 路径样式
+                renderer.strokeColor = UIColor.systemCyan.withAlphaComponent(0.9) // 青蓝色，90% 不透明度
+                renderer.lineWidth = 4.0 // 线宽 4 像素
+                renderer.lineCap = .round // 圆角端点
+                renderer.lineJoin = .round // 圆角连接
+
+                print("✅ [地图渲染] 路径样式已配置")
+                print("   - 颜色: 青蓝色")
+                print("   - 宽度: 4.0 像素")
+
+                return renderer
+            }
+
+            // 默认渲染器
+            return MKOverlayRenderer(overlay: overlay)
+        }
     }
 }
+

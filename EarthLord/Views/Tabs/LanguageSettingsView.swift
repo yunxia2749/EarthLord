@@ -232,7 +232,7 @@ struct LanguageOptionRow: View {
 // MARK: - Preview
 
 #Preview {
-    NavigationStack {
+    NavigationView {
         LanguageSettingsView()
     }
 }

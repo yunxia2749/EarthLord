@@ -234,7 +234,7 @@ struct SupabaseTestView: View {
 }
 
 #Preview {
-    NavigationStack {
+    NavigationView {
         SupabaseTestView()
     }
 }

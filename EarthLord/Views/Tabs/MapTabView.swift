@@ -31,9 +31,11 @@ struct MapTabView: View {
             if locationManager.isAuthorized {
                 MapViewRepresentable(
                     userLocation: $locationManager.userLocation,
-                    hasLocatedUser: $hasLocatedUser
+                    hasLocatedUser: $hasLocatedUser,
+                    pathCoordinates: $locationManager.pathCoordinates,
+                    pathUpdateVersion: $locationManager.pathUpdateVersion
                 )
-                .edgesIgnoringSafeArea(.all)
+                .ignoresSafeArea(.all, edges: [.top, .leading, .trailing])
             } else {
                 // 未授权时显示占位图
                 unauthorizedView
@@ -45,14 +47,34 @@ struct MapTabView: View {
                 Spacer()
             }
 
-            // 右下角定位按钮
+            // 右侧按钮组
             VStack {
                 Spacer()
                 HStack {
                     Spacer()
-                    locationButton
-                        .padding(.trailing, 16)
-                        .padding(.bottom, 16)
+                    VStack(spacing: 16) {
+                        // 圈地按钮
+                        trackingButton
+
+                        // 定位按钮
+                        locationButton
+
+                        // 停止圈地按钮（仅在追踪时显示）
+                        if locationManager.isTracking {
+                            stopTrackingButton
+                        }
+                    }
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 100) // 为 Tab Bar 留出空间
+                }
+            }
+
+            // 追踪状态提示
+            if locationManager.isTracking {
+                VStack {
+                    Spacer()
+                    trackingStatusBar
+                        .padding(.bottom, 90)
                 }
             }
         }
@@ -103,6 +125,35 @@ struct MapTabView: View {
         )
     }
 
+    /// 圈地追踪按钮
+    private var trackingButton: some View {
+        Button(action: {
+            if locationManager.isTracking {
+                // 停止圈地
+                locationManager.stopPathTracking()
+            } else {
+                // 开始圈地
+                if locationManager.isAuthorized {
+                    locationManager.startPathTracking()
+                } else {
+                    showPermissionAlert = true
+                }
+            }
+        }) {
+            Image(systemName: locationManager.isTracking ? "stop.circle.fill" : "figure.walk.circle.fill")
+                .font(.title2)
+                .foregroundColor(.white)
+                .frame(width: 50, height: 50)
+                .background(
+                    locationManager.isTracking ?
+                    ApocalypseTheme.danger :
+                    ApocalypseTheme.success
+                )
+                .clipShape(Circle())
+                .shadow(color: .black.opacity(0.3), radius: 5, x: 0, y: 2)
+        }
+    }
+
     /// 定位按钮
     private var locationButton: some View {
         Button(action: {
@@ -138,6 +189,39 @@ struct MapTabView: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("《地球新主》需要定位权限来显示您在末日世界中的位置。请在设置中开启定位权限。")
+        }
+    }
+
+    /// 停止圈地按钮（大按钮样式）
+    private var stopTrackingButton: some View {
+        Button(action: {
+            locationManager.stopPathTracking()
+        }) {
+            HStack(spacing: 8) {
+                Image(systemName: "stop.fill")
+                    .font(.title3)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("停止圈地")
+                        .font(.headline)
+                        .fontWeight(.bold)
+
+                    Text("\(locationManager.pathCoordinates.count) 点")
+                        .font(.caption)
+                }
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(
+                LinearGradient(
+                    colors: [ApocalypseTheme.danger, ApocalypseTheme.danger.opacity(0.8)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .cornerRadius(25)
+            .shadow(color: ApocalypseTheme.danger.opacity(0.5), radius: 10, x: 0, y: 5)
         }
     }
 
@@ -191,6 +275,49 @@ struct MapTabView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(ApocalypseTheme.background)
+    }
+
+    /// 追踪状态栏
+    private var trackingStatusBar: some View {
+        HStack(spacing: 12) {
+            // 动画指示器
+            Circle()
+                .fill(ApocalypseTheme.danger)
+                .frame(width: 12, height: 12)
+                .opacity(locationManager.isTracking ? 1 : 0)
+                .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: locationManager.isTracking)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("正在圈地...")
+                    .font(.headline)
+                    .foregroundColor(ApocalypseTheme.textPrimary)
+
+                Text("已记录 \(locationManager.pathCoordinates.count) 个点")
+                    .font(.caption)
+                    .foregroundColor(ApocalypseTheme.textSecondary)
+            }
+
+            Spacer()
+
+            // 清除按钮
+            Button(action: {
+                locationManager.clearPath()
+            }) {
+                Image(systemName: "trash.fill")
+                    .font(.subheadline)
+                    .foregroundColor(ApocalypseTheme.danger)
+                    .padding(8)
+                    .background(ApocalypseTheme.cardBackground)
+                    .clipShape(Circle())
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(ApocalypseTheme.cardBackground)
+                .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
+        )
+        .padding(.horizontal)
     }
 }
 

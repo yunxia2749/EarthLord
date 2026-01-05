@@ -9,7 +9,7 @@ import SwiftUI
 
 struct MoreTabView: View {
     var body: some View {
-        NavigationStack {
+        NavigationView {
             ZStack {
                 ApocalypseTheme.background
                     .ignoresSafeArea()

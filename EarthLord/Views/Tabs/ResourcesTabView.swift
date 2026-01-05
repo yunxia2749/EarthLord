@@ -29,7 +29,7 @@ struct ResourcesTabView: View {
     // MARK: - Body
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             ZStack {
                 // 背景
                 ApocalypseTheme.background

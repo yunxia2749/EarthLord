@@ -61,7 +61,7 @@ struct TerritoryTabView: View {
     // MARK: - Body
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             ZStack {
                 ApocalypseTheme.background
                     .ignoresSafeArea()
@@ -404,7 +404,7 @@ struct TerritoryDetailView: View {
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             ZStack {
                 ApocalypseTheme.background.ignoresSafeArea()
 

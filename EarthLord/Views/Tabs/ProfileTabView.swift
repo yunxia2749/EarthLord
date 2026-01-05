@@ -121,7 +121,6 @@ struct ProfileTabView: View {
                 Text("ID: \(userId.uuidString.prefix(8))...")
                     .font(.caption)
                     .foregroundColor(ApocalypseTheme.textMuted)
-                    .fontDesign(.monospaced)
             }
         }
         .frame(maxWidth: .infinity)
@@ -593,7 +592,6 @@ struct SettingRow: View {
                 // 值
                 Text(value)
                     .foregroundColor(ApocalypseTheme.textPrimary)
-                    .fontDesign(.default)
             }
             .padding()
 
