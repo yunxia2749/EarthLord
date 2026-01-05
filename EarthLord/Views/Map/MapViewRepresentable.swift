@@ -26,6 +26,9 @@ struct MapViewRepresentable: UIViewRepresentable {
     /// 路径更新版本号
     @Binding var pathUpdateVersion: Int
 
+    /// 路径是否已闭环
+    var isPathClosed: Bool
+
     // MARK: - UIViewRepresentable
 
     /// 创建MKMapView
@@ -143,11 +146,10 @@ struct MapViewRepresentable: UIViewRepresentable {
         /// 更新追踪路径
         /// - Parameters:
         ///   - mapView: 地图视图
-        ///   - coordinates: 路径坐标数组（WGS-84）
+        ///   - coordinates: 路径坐标数组
         func updateTrackingPath(on mapView: MKMapView, coordinates: [CLLocationCoordinate2D]) {
-            // 移除旧的路径覆盖层
-            let oldOverlays = mapView.overlays.filter { $0 is MKPolyline }
-            mapView.removeOverlays(oldOverlays)
+            // 移除旧的覆盖层（路径线和多边形）
+            mapView.removeOverlays(mapView.overlays)
 
             // 如果没有坐标点，直接返回
             guard coordinates.count >= 2 else {
@@ -156,6 +158,7 @@ struct MapViewRepresentable: UIViewRepresentable {
 
             print("\n🎨 [地图渲染] ========== 绘制路径 ==========")
             print("📍 [地图渲染] 原始坐标点数: \(coordinates.count)")
+            print("🔒 [地图渲染] 闭环状态: \(parent.isPathClosed ? "已闭环" : "未闭环")")
 
             // ⭐ iOS MapKit 在中国已使用 GCJ-02 坐标系，无需转换
             // CoreLocation 返回的坐标已经是 GCJ-02，直接使用即可
@@ -165,14 +168,22 @@ struct MapViewRepresentable: UIViewRepresentable {
             var mutableCoordinates = coordinates
             let polyline = MKPolyline(coordinates: &mutableCoordinates, count: coordinates.count)
 
-            // ⭐ 添加覆盖层到地图
+            // 添加路径线到地图
             mapView.addOverlay(polyline)
+
+            // 如果已闭环且点数≥3，添加多边形填充
+            if parent.isPathClosed && coordinates.count >= 3 {
+                var polygonCoordinates = coordinates
+                let polygon = MKPolygon(coordinates: &polygonCoordinates, count: coordinates.count)
+                mapView.addOverlay(polygon)
+                print("✅ [地图渲染] 已添加多边形填充")
+            }
 
             print("✅ [地图渲染] 路径已添加到地图")
             print("🎨 [地图渲染] ========== 绘制完成 ==========\n")
         }
 
-        /// ⭐ 关键方法：渲染覆盖层（绘制路径线条）
+        /// ⭐ 关键方法：渲染覆盖层（绘制路径线条和多边形）
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             // 如果是路径线
             if let polyline = overlay as? MKPolyline {
@@ -180,15 +191,45 @@ struct MapViewRepresentable: UIViewRepresentable {
 
                 let renderer = MKPolylineRenderer(polyline: polyline)
 
+                // 根据闭环状态选择颜色
+                let lineColor: UIColor
+                let colorName: String
+
+                if parent.isPathClosed {
+                    lineColor = UIColor.systemGreen // 闭环后变绿色
+                    colorName = "绿色"
+                } else {
+                    lineColor = UIColor.systemCyan // 未闭环是青蓝色
+                    colorName = "青蓝色"
+                }
+
                 // 路径样式
-                renderer.strokeColor = UIColor.systemCyan.withAlphaComponent(0.9) // 青蓝色，90% 不透明度
+                renderer.strokeColor = lineColor.withAlphaComponent(0.9) // 90% 不透明度
                 renderer.lineWidth = 4.0 // 线宽 4 像素
                 renderer.lineCap = .round // 圆角端点
                 renderer.lineJoin = .round // 圆角连接
 
                 print("✅ [地图渲染] 路径样式已配置")
-                print("   - 颜色: 青蓝色")
+                print("   - 颜色: \(colorName)")
                 print("   - 宽度: 4.0 像素")
+
+                return renderer
+            }
+
+            // 如果是多边形
+            if let polygon = overlay as? MKPolygon {
+                print("🖌️  [地图渲染] 创建多边形渲染器")
+
+                let renderer = MKPolygonRenderer(polygon: polygon)
+
+                // 多边形样式
+                renderer.fillColor = UIColor.systemGreen.withAlphaComponent(0.25) // 半透明绿色填充
+                renderer.strokeColor = UIColor.systemGreen // 绿色边框
+                renderer.lineWidth = 2.0 // 边框宽度
+
+                print("✅ [地图渲染] 多边形样式已配置")
+                print("   - 填充色: 半透明绿色")
+                print("   - 边框色: 绿色")
 
                 return renderer
             }

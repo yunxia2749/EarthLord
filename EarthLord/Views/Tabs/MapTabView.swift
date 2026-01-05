@@ -33,7 +33,8 @@ struct MapTabView: View {
                     userLocation: $locationManager.userLocation,
                     hasLocatedUser: $hasLocatedUser,
                     pathCoordinates: $locationManager.pathCoordinates,
-                    pathUpdateVersion: $locationManager.pathUpdateVersion
+                    pathUpdateVersion: $locationManager.pathUpdateVersion,
+                    isPathClosed: locationManager.isPathClosed
                 )
                 .ignoresSafeArea(.all, edges: [.top, .leading, .trailing])
             } else {
@@ -44,6 +45,12 @@ struct MapTabView: View {
             // 顶部信息栏
             VStack {
                 topInfoBar
+
+                // 速度警告横幅
+                if locationManager.speedWarning != nil {
+                    speedWarningBanner
+                }
+
                 Spacer()
             }
 
@@ -123,6 +130,44 @@ struct MapTabView: View {
                 .opacity(0.9)
                 .blur(radius: 10)
         )
+    }
+
+    /// 速度警告横幅
+    private var speedWarningBanner: some View {
+        HStack(spacing: 12) {
+            // 警告图标
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title3)
+                .foregroundColor(.white)
+
+            // 警告文字
+            Text(locationManager.speedWarning ?? "")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(.white)
+
+            Spacer()
+        }
+        .padding()
+        .background(
+            // 根据是否还在追踪选择背景色
+            locationManager.isTracking ?
+                ApocalypseTheme.warning : // 黄色警告（还在追踪）
+                ApocalypseTheme.danger    // 红色警告（已暂停）
+        )
+        .cornerRadius(12)
+        .padding(.horizontal)
+        .padding(.top, 8)
+        .transition(.move(edge: .top).combined(with: .opacity))
+        .animation(.easeInOut, value: locationManager.speedWarning)
+        .onAppear {
+            // 3秒后自动消失
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                withAnimation {
+                    locationManager.speedWarning = nil
+                }
+            }
+        }
     }
 
     /// 圈地追踪按钮
