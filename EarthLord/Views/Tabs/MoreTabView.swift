@@ -20,11 +20,11 @@ struct MoreTabView: View {
                         SectionHeader(title: "开发工具")
 
                         VStack(spacing: 0) {
-                            NavigationLink(destination: SupabaseTestView()) {
+                            NavigationLink(destination: TestMenuView()) {
                                 MoreMenuItem(
-                                    icon: "server.rack",
-                                    title: "Supabase 连接测试",
-                                    subtitle: "测试后端服务连接状态",
+                                    icon: "hammer.fill",
+                                    title: "开发测试",
+                                    subtitle: "功能测试和调试工具",
                                     iconColor: ApocalypseTheme.info
                                 )
                             }

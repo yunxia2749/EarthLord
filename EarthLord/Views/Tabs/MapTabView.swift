@@ -10,10 +10,10 @@ import MapKit
 
 struct MapTabView: View {
 
-    // MARK: - State Objects
+    // MARK: - Environment Objects
 
-    /// 定位管理器
-    @StateObject private var locationManager = LocationManager()
+    /// 定位管理器（从父视图注入）
+    @EnvironmentObject var locationManager: LocationManager
 
     // MARK: - State Properties
 
@@ -42,8 +42,9 @@ struct MapTabView: View {
                 unauthorizedView
             }
 
-            // 顶部信息栏
-            VStack {
+            // 主要UI层（确保在地图之上）
+            VStack(spacing: 0) {
+                // 顶部信息栏
                 topInfoBar
 
                 // 速度警告横幅
@@ -52,7 +53,14 @@ struct MapTabView: View {
                 }
 
                 Spacer()
+
+                // 底部停止圈地按钮（追踪时显示）
+                if locationManager.isTracking {
+                    stopTrackingButtonLarge
+                        .padding(.bottom, 16)
+                }
             }
+            .zIndex(1) // 确保在地图之上
 
             // 右侧按钮组
             VStack {
@@ -60,30 +68,19 @@ struct MapTabView: View {
                 HStack {
                     Spacer()
                     VStack(spacing: 16) {
-                        // 圈地按钮
-                        trackingButton
+                        // 圈地按钮（不在追踪时显示）
+                        if !locationManager.isTracking {
+                            trackingButton
+                        }
 
                         // 定位按钮
                         locationButton
-
-                        // 停止圈地按钮（仅在追踪时显示）
-                        if locationManager.isTracking {
-                            stopTrackingButton
-                        }
                     }
                     .padding(.trailing, 16)
-                    .padding(.bottom, 100) // 为 Tab Bar 留出空间
+                    .padding(.bottom, locationManager.isTracking ? 100 : 100) // 为停止按钮和Tab Bar留出空间
                 }
             }
-
-            // 追踪状态提示
-            if locationManager.isTracking {
-                VStack {
-                    Spacer()
-                    trackingStatusBar
-                        .padding(.bottom, 90)
-                }
-            }
+            .zIndex(2) // 确保按钮在最上层
         }
         .onAppear {
             // 首次打开时请求定位权限
@@ -132,42 +129,31 @@ struct MapTabView: View {
         )
     }
 
-    /// 速度警告横幅
+    /// 速度警告横幅（小型样式）
     private var speedWarningBanner: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 8) {
             // 警告图标
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.title3)
+                .font(.body)
                 .foregroundColor(.white)
 
-            // 警告文字
+            // 警告文字（单行）
             Text(locationManager.speedWarning ?? "")
                 .font(.subheadline)
-                .fontWeight(.semibold)
+                .fontWeight(.medium)
                 .foregroundColor(.white)
-
-            Spacer()
+                .lineLimit(1)
         }
-        .padding()
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .background(
-            // 根据是否还在追踪选择背景色
-            locationManager.isTracking ?
-                ApocalypseTheme.warning : // 黄色警告（还在追踪）
-                ApocalypseTheme.danger    // 红色警告（已暂停）
+            Color.orange // 橙色背景
         )
-        .cornerRadius(12)
+        .cornerRadius(20)
         .padding(.horizontal)
         .padding(.top, 8)
         .transition(.move(edge: .top).combined(with: .opacity))
         .animation(.easeInOut, value: locationManager.speedWarning)
-        .onAppear {
-            // 3秒后自动消失
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                withAnimation {
-                    locationManager.speedWarning = nil
-                }
-            }
-        }
     }
 
     /// 圈地追踪按钮
@@ -237,37 +223,32 @@ struct MapTabView: View {
         }
     }
 
-    /// 停止圈地按钮（大按钮样式）
-    private var stopTrackingButton: some View {
+    /// 停止圈地按钮（老师样式）
+    private var stopTrackingButtonLarge: some View {
         Button(action: {
             locationManager.stopPathTracking()
         }) {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
+                // 停止图标（方形）
                 Image(systemName: "stop.fill")
                     .font(.title3)
+                    .foregroundColor(.white)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("停止圈地")
-                        .font(.headline)
-                        .fontWeight(.bold)
-
-                    Text("\(locationManager.pathCoordinates.count) 点")
-                        .font(.caption)
-                }
+                // 文字
+                Text("停止圈地 \(locationManager.pathCoordinates.count)点")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
             }
-            .foregroundColor(.white)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 14)
             .background(
-                LinearGradient(
-                    colors: [ApocalypseTheme.danger, ApocalypseTheme.danger.opacity(0.8)],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
+                Color.red // 纯红色背景
             )
             .cornerRadius(25)
-            .shadow(color: ApocalypseTheme.danger.opacity(0.5), radius: 10, x: 0, y: 5)
+            .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
         }
+        .padding(.horizontal)
     }
 
     /// 未授权时的占位视图
@@ -322,52 +303,11 @@ struct MapTabView: View {
         .background(ApocalypseTheme.background)
     }
 
-    /// 追踪状态栏
-    private var trackingStatusBar: some View {
-        HStack(spacing: 12) {
-            // 动画指示器
-            Circle()
-                .fill(ApocalypseTheme.danger)
-                .frame(width: 12, height: 12)
-                .opacity(locationManager.isTracking ? 1 : 0)
-                .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: locationManager.isTracking)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("正在圈地...")
-                    .font(.headline)
-                    .foregroundColor(ApocalypseTheme.textPrimary)
-
-                Text("已记录 \(locationManager.pathCoordinates.count) 个点")
-                    .font(.caption)
-                    .foregroundColor(ApocalypseTheme.textSecondary)
-            }
-
-            Spacer()
-
-            // 清除按钮
-            Button(action: {
-                locationManager.clearPath()
-            }) {
-                Image(systemName: "trash.fill")
-                    .font(.subheadline)
-                    .foregroundColor(ApocalypseTheme.danger)
-                    .padding(8)
-                    .background(ApocalypseTheme.cardBackground)
-                    .clipShape(Circle())
-            }
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(ApocalypseTheme.cardBackground)
-                .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
-        )
-        .padding(.horizontal)
-    }
 }
 
 // MARK: - Preview
 
 #Preview {
     MapTabView()
+        .environmentObject(LocationManager())
 }

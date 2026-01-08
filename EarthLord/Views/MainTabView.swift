@@ -10,9 +10,13 @@ import SwiftUI
 struct MainTabView: View {
     @State private var selectedTab = 0
 
+    /// 定位管理器 - 在所有标签页之间共享
+    @StateObject private var locationManager = LocationManager()
+
     var body: some View {
         TabView(selection: $selectedTab) {
             MapTabView()
+                .environmentObject(locationManager)
                 .tabItem {
                     Image(systemName: "map.fill")
                     Text("地图")
@@ -41,6 +45,7 @@ struct MainTabView: View {
                 .tag(3)
 
             MoreTabView()
+                .environmentObject(locationManager)
                 .tabItem {
                     Image(systemName: "ellipsis")
                     Text("更多")

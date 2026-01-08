@@ -56,8 +56,11 @@ struct MapViewRepresentable: UIViewRepresentable {
 
     /// 更新视图
     func updateUIView(_ uiView: MKMapView, context: Context) {
-        // ⭐ 关键：当路径坐标更新时，重新绘制轨迹
-        context.coordinator.updateTrackingPath(on: uiView, coordinates: pathCoordinates)
+        // ⚠️ 关键：更新 Coordinator 的 parent 引用（否则会用旧的 isPathClosed 值）
+        context.coordinator.parent = self
+
+        // ⭐ 关键：当路径坐标、版本号或闭环状态更新时，重新绘制轨迹
+        context.coordinator.updateTrackingPath(on: uiView, coordinates: pathCoordinates, version: pathUpdateVersion)
     }
 
     /// 创建协调器
@@ -147,16 +150,18 @@ struct MapViewRepresentable: UIViewRepresentable {
         /// - Parameters:
         ///   - mapView: 地图视图
         ///   - coordinates: 路径坐标数组
-        func updateTrackingPath(on mapView: MKMapView, coordinates: [CLLocationCoordinate2D]) {
+        ///   - version: 路径版本号（用于强制更新）
+        func updateTrackingPath(on mapView: MKMapView, coordinates: [CLLocationCoordinate2D], version: Int) {
             // 移除旧的覆盖层（路径线和多边形）
             mapView.removeOverlays(mapView.overlays)
 
             // 如果没有坐标点，直接返回
             guard coordinates.count >= 2 else {
+                print("⚠️  [地图渲染] 坐标点不足2个（当前:\(coordinates.count)），跳过绘制")
                 return
             }
 
-            print("\n🎨 [地图渲染] ========== 绘制路径 ==========")
+            print("\n🎨 [地图渲染] ========== 绘制路径 (版本 \(version)) ==========")
             print("📍 [地图渲染] 原始坐标点数: \(coordinates.count)")
             print("🔒 [地图渲染] 闭环状态: \(parent.isPathClosed ? "已闭环" : "未闭环")")
 
