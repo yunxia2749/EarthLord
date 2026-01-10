@@ -18,7 +18,7 @@ class AuthManager: ObservableObject {
     // MARK: - Published Properties (发布属性)
 
     /// 用户是否已完全认证（登录且完成所有必要流程）
-    @Published var isAuthenticated: Bool = false
+    @Published var isAuthenticated: Bool = true  // 直接进入主页
 
     /// 是否需要设置密码（OTP 验证后的必要步骤）
     @Published var needsPasswordSetup: Bool = false

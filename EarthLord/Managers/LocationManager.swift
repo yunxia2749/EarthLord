@@ -153,15 +153,29 @@ class LocationManager: NSObject, ObservableObject {
         print("\n🛑 [路径追踪] ========== 停止圈地 ==========")
         print("📊 [路径追踪] 总记录点数: \(pathCoordinates.count)")
 
+        // 添加日志（在清空之前）
+        TerritoryLogger.shared.log("停止追踪，共 \(pathCoordinates.count) 个点", type: .info)
+
+        // 重置追踪状态
         isTracking = false
         trackingTimer?.invalidate()
         trackingTimer = nil
 
-        print("⏱️  [路径追踪] 定时器已停止")
-        print("🛑 [路径追踪] ========== 圈地已停止 ==========\n")
+        // ⭐ 清空所有路径和验证数据（准备下一次圈地）
+        pathCoordinates.removeAll()
+        pathUpdateVersion = 0
+        isPathClosed = false
+        territoryValidationPassed = false
+        territoryValidationError = nil
+        calculatedArea = 0
+        speedWarning = nil
+        isOverSpeed = false
+        lastLocationTimestamp = nil
+        lastRecordedLocation = nil
 
-        // 添加日志
-        TerritoryLogger.shared.log("停止追踪，共 \(pathCoordinates.count) 个点", type: .info)
+        print("⏱️  [路径追踪] 定时器已停止")
+        print("🗑️  [路径追踪] 所有数据已清空")
+        print("🛑 [路径追踪] ========== 圈地已停止 ==========\n")
     }
 
     /// 清除路径

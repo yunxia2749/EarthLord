@@ -15,6 +15,11 @@ struct MapTabView: View {
     /// 定位管理器（从父视图注入）
     @EnvironmentObject var locationManager: LocationManager
 
+    // MARK: - Managers
+
+    /// 领地管理器
+    @StateObject private var territoryManager = TerritoryManager.shared
+
     // MARK: - State Properties
 
     /// 是否已完成首次定位
@@ -25,6 +30,15 @@ struct MapTabView: View {
 
     /// 是否显示验证结果横幅
     @State private var showValidationBanner = false
+
+    /// 是否正在上传
+    @State private var isUploading = false
+
+    /// 上传错误消息
+    @State private var uploadError: String?
+
+    /// 是否显示成功提示
+    @State private var showSuccessMessage = false
 
     // MARK: - Body
 
@@ -62,8 +76,13 @@ struct MapTabView: View {
 
                 Spacer()
 
-                // 底部停止圈地按钮（追踪时显示）
-                if locationManager.isTracking {
+                // 底部按钮区域
+                if locationManager.territoryValidationPassed {
+                    // 验证通过时显示「确认登记」按钮
+                    confirmUploadButton
+                        .padding(.bottom, 16)
+                } else if locationManager.isTracking {
+                    // 追踪中但未验证通过时显示「停止圈地」按钮
                     stopTrackingButtonLarge
                         .padding(.bottom, 16)
                 }
@@ -355,6 +374,113 @@ struct MapTabView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(ApocalypseTheme.background)
+    }
+
+    // MARK: - Confirm Upload Button
+
+    /// 确认登记领地按钮
+    private var confirmUploadButton: some View {
+        Button(action: {
+            Task {
+                await uploadCurrentTerritory()
+            }
+        }) {
+            HStack(spacing: 10) {
+                // 图标
+                Image(systemName: isUploading ? "arrow.up.circle" : "checkmark.circle.fill")
+                    .font(.title3)
+                    .foregroundColor(.white)
+
+                // 文字
+                Text(isUploading ? "正在上传..." : "确认登记领地")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity)
+            .background(
+                LinearGradient(
+                    colors: isUploading ? [Color.gray] : [Color.green, Color.green.opacity(0.8)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .cornerRadius(30)
+            .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
+        }
+        .disabled(isUploading)
+        .padding(.horizontal, 20)
+        .alert("上传失败", isPresented: .constant(uploadError != nil)) {
+            Button("确定") {
+                uploadError = nil
+            }
+        } message: {
+            Text(uploadError ?? "")
+        }
+        .alert("领地登记成功", isPresented: $showSuccessMessage) {
+            Button("确定") {
+                showSuccessMessage = false
+            }
+        } message: {
+            Text("领地已成功登记到数据库！")
+        }
+    }
+
+    // MARK: - Upload Method
+
+    /// 上传当前领地
+    private func uploadCurrentTerritory() async {
+        print("🔵 [MapTabView] 用户点击上传按钮")
+
+        // ⚠️ 再次检查验证状态
+        guard locationManager.territoryValidationPassed else {
+            print("❌ [MapTabView] 验证未通过，禁止上传")
+            uploadError = "领地验证未通过，无法上传"
+            return
+        }
+
+        guard !locationManager.pathCoordinates.isEmpty else {
+            print("❌ [MapTabView] 路径为空，禁止上传")
+            uploadError = "路径数据为空，无法上传"
+            return
+        }
+
+        isUploading = true
+
+        do {
+            print("📤 [MapTabView] 开始上传领地")
+            print("   - 坐标点数: \(locationManager.pathCoordinates.count)")
+            print("   - 面积: \(locationManager.calculatedArea) m²")
+
+            try await territoryManager.uploadTerritory(
+                coordinates: locationManager.pathCoordinates,
+                area: locationManager.calculatedArea,
+                startTime: Date() // 使用当前时间作为开始时间
+            )
+
+            print("✅ [MapTabView] 上传成功")
+
+            // 显示成功提示
+            await MainActor.run {
+                showSuccessMessage = true
+            }
+
+            // ⚠️ 关键：上传成功后必须停止追踪！
+            locationManager.stopPathTracking()
+
+        } catch {
+            print("❌ [MapTabView] 上传失败: \(error.localizedDescription)")
+            await MainActor.run {
+                uploadError = "上传失败: \(error.localizedDescription)"
+                isUploading = false
+            }
+        }
+
+        await MainActor.run {
+            isUploading = false
+        }
     }
 
 }
