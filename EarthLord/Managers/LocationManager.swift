@@ -191,6 +191,11 @@ class LocationManager: NSObject, ObservableObject {
     /// 记录路径点
     /// ⚠️ 关键：先检查距离，再检查速度！顺序不能反！
     private func recordPathPoint() {
+        // ⭐ 如果已闭环，停止记录新点（保持验证时的数据不变）
+        guard !isPathClosed else {
+            return
+        }
+
         // 检查当前位置
         guard let location = userLocation else {
             print("⚠️  [路径追踪] 当前位置为 nil，跳过本次记录")
@@ -300,10 +305,9 @@ class LocationManager: NSObject, ObservableObject {
                 calculatedArea = 0
             }
 
-            // 闭环成功后自动停止追踪
-            DispatchQueue.main.async { [weak self] in
-                self?.stopPathTracking()
-            }
+            // ⭐ 不自动停止追踪，让用户选择：
+            // - 验证通过：点击「确认登记」上传（上传后自动停止）
+            // - 验证失败：点击「停止圈地」手动停止
         }
     }
 
@@ -349,11 +353,11 @@ class LocationManager: NSObject, ObservableObject {
             return false // 忽略这次更新，不停止追踪
         }
 
-        // 步骤3：检测真实超速（30-100 km/h，可能是开车）
-        if speed > 30 {
-            speedWarning = "移动速度较快: \(String(format: "%.0f", speed))km/h"
+        // 步骤3：检测严重超速（50-100 km/h，可能是开车）
+        if speed > 50 {
+            speedWarning = "移动速度过快: \(String(format: "%.0f", speed))km/h"
             isOverSpeed = true
-            print("⚠️  [速度检测] 速度超过30km/h，暂停追踪")
+            print("⚠️  [速度检测] 速度超过50km/h，停止追踪")
 
             // 添加错误日志
             TerritoryLogger.shared.log("超速 \(String(format: "%.1f", speed)) km/h，已停止追踪", type: .error)
@@ -365,7 +369,14 @@ class LocationManager: NSObject, ObservableObject {
             return false
         }
 
-        // 步骤4：速度超过 15 km/h，显示警告但继续记录
+        // 步骤4：检测中度超速（30-50 km/h，可能是GPS漂移或骑车）
+        if speed > 30 {
+            print("⚠️  [速度检测] 速度 \(String(format: "%.1f", speed)) km/h，可能是GPS漂移，忽略本次更新")
+            TerritoryLogger.shared.log("速度 \(String(format: "%.1f", speed)) km/h，疑似GPS漂移，已忽略", type: .warning)
+            return false // 忽略这次更新，但不停止追踪
+        }
+
+        // 步骤5：速度超过 15 km/h，显示警告但继续记录
         if speed > 15 {
             speedWarning = "移动速度较快: \(String(format: "%.0f", speed))km/h"
             isOverSpeed = true

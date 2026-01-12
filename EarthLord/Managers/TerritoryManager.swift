@@ -112,10 +112,34 @@ class TerritoryManager: ObservableObject {
         print("   - 面积: \(area) m²")
 
         // 获取当前用户ID
-        guard let userId = try? await supabase.auth.session.user.id else {
-            print("❌ [TerritoryManager] 未登录，无法上传领地")
-            throw NSError(domain: "TerritoryManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "用户未登录"])
+        print("🔍 [TerritoryManager] 正在获取 Supabase session...")
+
+        do {
+            let session = try await supabase.auth.session
+            let userId = session.user.id
+
+            print("✅ [TerritoryManager] 成功获取用户信息")
+            print("   - User ID: \(userId.uuidString)")
+            print("   - Email: \(session.user.email ?? "未知")")
+
+            // 继续上传流程
+            try await performUpload(userId: userId, coordinates: coordinates, area: area, startTime: startTime)
+
+        } catch {
+            print("❌ [TerritoryManager] 获取 session 失败: \(error)")
+            print("   - 错误类型: \(type(of: error))")
+            print("   - 错误详情: \(error.localizedDescription)")
+            throw NSError(domain: "TerritoryManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "用户未登录或 session 已过期"])
         }
+    }
+
+    /// 执行实际的上传操作
+    private func performUpload(
+        userId: UUID,
+        coordinates: [CLLocationCoordinate2D],
+        area: Double,
+        startTime: Date
+    ) async throws {
 
         // 1. 转换坐标为 path JSON
         let pathJSON = coordinatesToPathJSON(coordinates)

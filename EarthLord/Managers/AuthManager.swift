@@ -18,7 +18,7 @@ class AuthManager: ObservableObject {
     // MARK: - Published Properties (发布属性)
 
     /// 用户是否已完全认证（登录且完成所有必要流程）
-    @Published var isAuthenticated: Bool = true  // 直接进入主页
+    @Published var isAuthenticated: Bool = false  // 恢复正常登录
 
     /// 是否需要设置密码（OTP 验证后的必要步骤）
     @Published var needsPasswordSetup: Bool = false
@@ -49,7 +49,6 @@ class AuthManager: ObservableObject {
         // 初始化时检查会话
         Task {
             await checkSession()
-            // 启动会话监听
             await startAuthStateListener()
         }
     }
@@ -324,12 +323,17 @@ class AuthManager: ObservableObject {
 
             // 4. 登录成功
             currentUser = session.user
-            isAuthenticated = true
-            needsPasswordSetup = false
 
             print("✅ [认证] Google登录成功！")
             print("📝 [认证] 用户ID: \(session.user.id)")
             print("📝 [认证] 邮箱: \(session.user.email ?? "未知")")
+
+            // 5. 确保 profile 记录存在（重要！）
+            print("🔍 [认证] 检查并创建 profile 记录...")
+            try await ensureProfileExists(userId: session.user.id)
+
+            isAuthenticated = true
+            needsPasswordSetup = false
 
         } catch {
             // 登录失败
@@ -367,6 +371,59 @@ class AuthManager: ObservableObject {
 
         // 获取 root view controller
         return window.rootViewController
+    }
+
+    // MARK: - Profile 管理
+
+    /// Profile 创建数据结构
+    private struct ProfileInsertData: Encodable {
+        let id: String
+        let username: String
+        let avatar_url: String?
+    }
+
+    /// 确保用户的 profile 记录存在
+    /// 登录后必须调用此方法，因为 territories 表的外键指向 profiles.id
+    private func ensureProfileExists(userId: UUID) async throws {
+        do {
+            // 尝试查询 profile 是否已存在
+            struct ProfileCheck: Decodable {
+                let id: String
+            }
+
+            let _: [ProfileCheck] = try await supabase
+                .from("profiles")
+                .select("id")
+                .eq("id", value: userId.uuidString)
+                .limit(1)
+                .execute()
+                .value
+
+            print("✅ [认证] Profile 记录已存在")
+
+        } catch {
+            // Profile 不存在，创建新记录
+            print("⚠️  [认证] Profile 不存在，正在创建...")
+
+            do {
+                let profileData = ProfileInsertData(
+                    id: userId.uuidString,
+                    username: "user_\(userId.uuidString.prefix(8))",  // 默认用户名
+                    avatar_url: nil
+                )
+
+                try await supabase
+                    .from("profiles")
+                    .insert(profileData)
+                    .execute()
+
+                print("✅ [认证] Profile 创建成功！")
+
+            } catch {
+                print("❌ [认证] Profile 创建失败: \(error)")
+                throw error
+            }
+        }
     }
 
     // MARK: - 其他方法
@@ -465,15 +522,19 @@ class AuthManager: ObservableObject {
             // 会话存在
             currentUser = session.user
 
+            print("✅ 会话恢复成功")
+            print("用户 ID: \(session.user.id)")
+            print("邮箱: \(session.user.email ?? "未知")")
+
+            // ⭐ 确保 profile 记录存在（非常重要！）
+            print("🔍 [会话恢复] 检查并创建 profile 记录...")
+            try await ensureProfileExists(userId: session.user.id)
+
             // 检查用户是否已设置密码
             // 注意：这里假设如果能获取到会话，用户就已经完成了所有必要的设置
             // 如果需要更精确的判断，可以在用户元数据中存储标志位
             isAuthenticated = true
             needsPasswordSetup = false
-
-            print("✅ 会话恢复成功")
-            print("用户 ID: \(session.user.id)")
-            print("邮箱: \(session.user.email ?? "未知")")
 
         } catch {
             // 没有有效会话

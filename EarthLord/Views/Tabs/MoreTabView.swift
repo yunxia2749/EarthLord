@@ -8,6 +8,9 @@
 import SwiftUI
 
 struct MoreTabView: View {
+    /// 定位管理器（从父视图注入，传递给子视图）
+    @EnvironmentObject var locationManager: LocationManager
+
     var body: some View {
         NavigationView {
             ZStack {
@@ -20,7 +23,7 @@ struct MoreTabView: View {
                         SectionHeader(title: "开发工具")
 
                         VStack(spacing: 0) {
-                            NavigationLink(destination: TestMenuView()) {
+                            NavigationLink(destination: TestMenuView().environmentObject(locationManager)) {
                                 MoreMenuItem(
                                     icon: "hammer.fill",
                                     title: "开发测试",

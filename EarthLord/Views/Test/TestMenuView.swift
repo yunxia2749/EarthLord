@@ -9,6 +9,9 @@ import SwiftUI
 
 struct TestMenuView: View {
 
+    /// 定位管理器（从父视图注入，传递给子视图）
+    @EnvironmentObject var locationManager: LocationManager
+
     var body: some View {
         List {
             // Supabase 连接测试
@@ -33,7 +36,7 @@ struct TestMenuView: View {
             }
 
             // 圈地功能测试
-            NavigationLink(destination: TerritoryTestView()) {
+            NavigationLink(destination: TerritoryTestView().environmentObject(locationManager)) {
                 HStack(spacing: 16) {
                     Image(systemName: "map.circle.fill")
                         .font(.title2)

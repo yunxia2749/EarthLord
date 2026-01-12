@@ -21,18 +21,33 @@ struct RootView: View {
                 // 第一步：显示启动页
                 SplashView(isFinished: $splashFinished)
                     .transition(.opacity)
+                    .onAppear {
+                        print("🔵 [RootView] SplashView 显示中，splashFinished = \(splashFinished)")
+                    }
             } else if !authManager.isAuthenticated {
                 // 第二步：启动页完成后，如果未登录显示认证页
                 AuthView()
                     .transition(.opacity)
+                    .onAppear {
+                        print("🔵 [RootView] AuthView 显示中，isAuthenticated = \(authManager.isAuthenticated)")
+                    }
             } else {
                 // 第三步：已登录显示主界面
                 MainTabView()
                     .transition(.opacity)
+                    .onAppear {
+                        print("🔵 [RootView] MainTabView 显示中，isAuthenticated = \(authManager.isAuthenticated)")
+                    }
             }
         }
         .animation(.easeInOut(duration: 0.3), value: splashFinished)
         .animation(.easeInOut(duration: 0.3), value: authManager.isAuthenticated)
+        .onChange(of: splashFinished) { _ in
+            print("🟡 [RootView] splashFinished 变化: \(splashFinished)")
+        }
+        .onChange(of: authManager.isAuthenticated) { _ in
+            print("🟡 [RootView] isAuthenticated 变化: \(authManager.isAuthenticated)")
+        }
     }
 }
 

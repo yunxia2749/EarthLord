@@ -60,34 +60,37 @@ struct MapTabView: View {
             }
 
             // 主要UI层（确保在地图之上）
-            VStack(spacing: 0) {
-                // 顶部信息栏
-                topInfoBar
+            // ⚠️ 仅在授权时显示，避免覆盖 unauthorizedView 的按钮
+            if locationManager.isAuthorized {
+                VStack(spacing: 0) {
+                    // 顶部信息栏
+                    topInfoBar
 
-                // 速度警告横幅
-                if locationManager.speedWarning != nil {
-                    speedWarningBanner
+                    // 速度警告横幅
+                    if locationManager.speedWarning != nil {
+                        speedWarningBanner
+                    }
+
+                    // 验证结果横幅（闭环后显示）
+                    if showValidationBanner {
+                        validationResultBanner
+                    }
+
+                    Spacer()
+
+                    // 底部按钮区域
+                    if locationManager.territoryValidationPassed {
+                        // 验证通过时显示「确认登记」按钮
+                        confirmUploadButton
+                            .padding(.bottom, 16)
+                    } else if locationManager.isTracking {
+                        // 追踪中但未验证通过时显示「停止圈地」按钮
+                        stopTrackingButtonLarge
+                            .padding(.bottom, 16)
+                    }
                 }
-
-                // 验证结果横幅（闭环后显示）
-                if showValidationBanner {
-                    validationResultBanner
-                }
-
-                Spacer()
-
-                // 底部按钮区域
-                if locationManager.territoryValidationPassed {
-                    // 验证通过时显示「确认登记」按钮
-                    confirmUploadButton
-                        .padding(.bottom, 16)
-                } else if locationManager.isTracking {
-                    // 追踪中但未验证通过时显示「停止圈地」按钮
-                    stopTrackingButtonLarge
-                        .padding(.bottom, 16)
-                }
+                .zIndex(1) // 确保在地图之上
             }
-            .zIndex(1) // 确保在地图之上
 
             // 右侧按钮组
             VStack {
@@ -120,18 +123,24 @@ struct MapTabView: View {
         // ⭐ 监听闭环状态，闭环后根据验证结果显示横幅
         .onReceive(locationManager.$isPathClosed) { isClosed in
             if isClosed {
-                // 闭环后延迟一点点，等待验证结果
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                // 闭环后延迟0.2秒，确保验证结果已更新
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                     withAnimation {
                         showValidationBanner = true
                     }
-                    // 3秒后自动隐藏
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                        withAnimation {
-                            showValidationBanner = false
+
+                    // ⭐ 只有验证失败时才自动隐藏（验证通过时需要显示"确认登记"按钮）
+                    if !locationManager.territoryValidationPassed {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                            withAnimation {
+                                showValidationBanner = false
+                            }
                         }
                     }
                 }
+            } else {
+                // 路径被清空时，隐藏横幅
+                showValidationBanner = false
             }
         }
     }
@@ -465,6 +474,7 @@ struct MapTabView: View {
             // 显示成功提示
             await MainActor.run {
                 showSuccessMessage = true
+                showValidationBanner = false  // 隐藏验证横幅
             }
 
             // ⚠️ 关键：上传成功后必须停止追踪！
