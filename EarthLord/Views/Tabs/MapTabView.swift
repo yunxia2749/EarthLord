@@ -64,7 +64,8 @@ struct MapTabView: View {
                     pathCoordinates: $locationManager.pathCoordinates,
                     pathUpdateVersion: $locationManager.pathUpdateVersion,
                     isPathClosed: locationManager.isPathClosed,
-                    uploadedTerritories: uploadedTerritories
+                    uploadedTerritories: uploadedTerritories,
+                    currentUserId: currentUserId
                 )
                 .ignoresSafeArea(.all, edges: [.top, .leading, .trailing])
             } else {
@@ -98,9 +99,12 @@ struct MapTabView: View {
 
                     // 底部按钮区域
                     if locationManager.territoryValidationPassed {
-                        // 验证通过时显示「确认登记」按钮
-                        confirmUploadButton
-                            .padding(.bottom, 16)
+                        // 验证通过时显示「确认登记」和「取消」按钮
+                        VStack(spacing: 12) {
+                            confirmUploadButton
+                            cancelButton
+                        }
+                        .padding(.bottom, 16)
                     } else if locationManager.isTracking {
                         // 追踪中但未验证通过时显示「停止圈地」按钮
                         stopTrackingButtonLarge
@@ -147,6 +151,11 @@ struct MapTabView: View {
         // ⭐ 监听闭环状态，闭环后根据验证结果显示横幅
         .onReceive(locationManager.$isPathClosed) { isClosed in
             if isClosed {
+                // ⭐ 闭环时，清除碰撞警告横幅（避免和验证结果横幅重叠）
+                showCollisionWarning = false
+                collisionWarning = nil
+                collisionWarningLevel = .safe
+
                 // 闭环后延迟0.2秒，确保验证结果已更新
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                     withAnimation {
@@ -163,8 +172,11 @@ struct MapTabView: View {
                     }
                 }
             } else {
-                // 路径被清空时，隐藏横幅
+                // 路径被清空时，隐藏所有横幅
                 showValidationBanner = false
+                showCollisionWarning = false
+                collisionWarning = nil
+                collisionWarningLevel = .safe
             }
         }
     }
@@ -412,6 +424,50 @@ struct MapTabView: View {
     }
 
     // MARK: - Confirm Upload Button
+
+    /// 取消按钮（放弃当前圈地，重新开始）
+    private var cancelButton: some View {
+        Button(action: {
+            // 停止碰撞监控
+            stopCollisionMonitoring()
+
+            // 隐藏验证横幅
+            showValidationBanner = false
+
+            // 清空路径并停止追踪
+            locationManager.stopPathTracking()
+
+            // 触发轻微震动反馈
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.prepare()
+            generator.impactOccurred()
+
+            print("✅ [MapTabView] 用户取消圈地，可以重新开始")
+        }) {
+            HStack(spacing: 10) {
+                Image(systemName: "xmark.circle")
+                    .font(.title3)
+                    .foregroundColor(ApocalypseTheme.danger)
+
+                Text("取消重新圈地")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ApocalypseTheme.danger)
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity)
+            .background(
+                ApocalypseTheme.cardBackground
+            )
+            .cornerRadius(30)
+            .overlay(
+                RoundedRectangle(cornerRadius: 30)
+                    .stroke(ApocalypseTheme.danger, lineWidth: 2)
+            )
+        }
+        .padding(.horizontal, 20)
+    }
 
     /// 确认登记领地按钮
     private var confirmUploadButton: some View {

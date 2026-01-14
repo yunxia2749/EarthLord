@@ -101,6 +101,52 @@ class TerritoryManager: ObservableObject {
 
     // MARK: - Public Methods
 
+    /// 确保 session 有效（必要时刷新）
+    /// - Returns: 有效的用户 ID
+    /// - Throws: 认证错误
+    private func ensureValidSession() async throws -> UUID {
+        print("🔍 [TerritoryManager] 检查 session 状态...")
+
+        do {
+            // 第一次尝试：直接获取 session（会自动刷新 access token）
+            let session = try await supabase.auth.session
+            let userId = session.user.id
+
+            print("✅ [TerritoryManager] Session 有效")
+            print("   - User ID: \(userId.uuidString)")
+            print("   - Email: \(session.user.email ?? "未知")")
+
+            return userId
+
+        } catch {
+            print("⚠️  [TerritoryManager] 第一次获取 session 失败，尝试显式刷新...")
+
+            // 第二次尝试：显式刷新 session
+            do {
+                let refreshedSession = try await supabase.auth.refreshSession()
+                let userId = refreshedSession.user.id
+
+                print("✅ [TerritoryManager] Session 刷新成功")
+                print("   - User ID: \(userId.uuidString)")
+                print("   - Email: \(refreshedSession.user.email ?? "未知")")
+
+                return userId
+
+            } catch let refreshError {
+                print("❌ [TerritoryManager] Session 刷新失败")
+                print("   - 刷新错误: \(refreshError.localizedDescription)")
+                print("   - 原始错误: \(error.localizedDescription)")
+                print("   - 建议：用户需要重新登录")
+
+                throw NSError(
+                    domain: "TerritoryManager",
+                    code: 401,
+                    userInfo: [NSLocalizedDescriptionKey: "登录已过期，请退出后重新登录"]
+                )
+            }
+        }
+    }
+
     /// 上传领地到 Supabase
     /// - Parameters:
     ///   - coordinates: 坐标数组
@@ -116,26 +162,11 @@ class TerritoryManager: ObservableObject {
         print("   - 坐标点数: \(coordinates.count)")
         print("   - 面积: \(area) m²")
 
-        // 获取当前用户ID
-        print("🔍 [TerritoryManager] 正在获取 Supabase session...")
+        // 确保 session 有效
+        let userId = try await ensureValidSession()
 
-        do {
-            let session = try await supabase.auth.session
-            let userId = session.user.id
-
-            print("✅ [TerritoryManager] 成功获取用户信息")
-            print("   - User ID: \(userId.uuidString)")
-            print("   - Email: \(session.user.email ?? "未知")")
-
-            // 继续上传流程
-            try await performUpload(userId: userId, coordinates: coordinates, area: area, startTime: startTime)
-
-        } catch {
-            print("❌ [TerritoryManager] 获取 session 失败: \(error)")
-            print("   - 错误类型: \(type(of: error))")
-            print("   - 错误详情: \(error.localizedDescription)")
-            throw NSError(domain: "TerritoryManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "用户未登录或 session 已过期"])
-        }
+        // 继续上传流程
+        try await performUpload(userId: userId, coordinates: coordinates, area: area, startTime: startTime)
     }
 
     /// 执行实际的上传操作

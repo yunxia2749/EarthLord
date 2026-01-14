@@ -35,8 +35,16 @@ struct TerritoryTabView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                ApocalypseTheme.background
-                    .ignoresSafeArea()
+                // 蓝紫色渐变背景
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.15, green: 0.18, blue: 0.35),
+                        Color(red: 0.1, green: 0.12, blue: 0.25)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
 
                 if isLoading {
                     // 加载指示器
@@ -154,76 +162,46 @@ struct TerritoryTabView: View {
         }
     }
 
-    /// 领地统计卡片
+    /// 领地统计卡片（毛玻璃风格）
     private var territoryStatsCard: some View {
-        HStack(spacing: 20) {
+        HStack(spacing: 0) {
             // 领地数量
-            StatItem(
-                icon: "flag.fill",
-                title: "领地数",
-                value: "\(territories.count)",
-                color: ApocalypseTheme.primary
-            )
-
-            Divider()
-                .frame(height: 60)
-                .background(ApocalypseTheme.textMuted.opacity(0.3))
+            VStack(spacing: 4) {
+                Text("\(territories.count)")
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundColor(ApocalypseTheme.primary)
+                Text("领地数")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.7))
+            }
+            .frame(maxWidth: .infinity)
 
             // 总面积
-            StatItem(
-                icon: "map.fill",
-                title: "总面积",
-                value: formatArea(totalArea),
-                color: ApocalypseTheme.info
-            )
-
-            Divider()
-                .frame(height: 60)
-                .background(ApocalypseTheme.textMuted.opacity(0.3))
-
-            // 总路径点
-            StatItem(
-                icon: "location.fill",
-                title: "总路径点",
-                value: "\(totalPoints)",
-                color: ApocalypseTheme.warning
-            )
+            VStack(spacing: 4) {
+                Text(formatArea(totalArea))
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundColor(ApocalypseTheme.primary)
+                Text("总面积")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.7))
+            }
+            .frame(maxWidth: .infinity)
         }
-        .padding()
+        .padding(.vertical, 20)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(ApocalypseTheme.cardBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(ApocalypseTheme.primary.opacity(0.3), lineWidth: 1)
+                .fill(.ultraThinMaterial)
         )
     }
 
     /// 领地列表区域
     private var territoriesSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // 标题
-            HStack {
-                Text("领地列表")
-                    .font(.title3)
-                    .fontWeight(.bold)
-                    .foregroundColor(ApocalypseTheme.textPrimary)
-
-                Spacer()
-
-                Text("\(territories.count) 个")
-                    .font(.subheadline)
-                    .foregroundColor(ApocalypseTheme.textSecondary)
-            }
-
-            // 领地卡片列表
-            VStack(spacing: 12) {
-                ForEach(territories) { territory in
-                    TerritoryListCard(territory: territory) {
-                        selectedTerritory = territory
-                        showTerritoryDetail = true
-                    }
+        VStack(spacing: 12) {
+            // 领地卡片列表（无标题，简洁风格）
+            ForEach(territories) { territory in
+                TerritoryListCard(territory: territory) {
+                    selectedTerritory = territory
+                    showTerritoryDetail = true
                 }
             }
         }
@@ -275,50 +253,42 @@ struct TerritoryTabView: View {
 
 // MARK: - Territory List Card
 
-/// 领地列表卡片
+/// 领地列表卡片（简洁毛玻璃风格）
 struct TerritoryListCard: View {
     let territory: TerritoryData
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 16) {
-                // 左侧图标
-                ZStack {
-                    Circle()
-                        .fill(ApocalypseTheme.primary.opacity(0.2))
-                        .frame(width: 50, height: 50)
-
-                    Image(systemName: "flag.fill")
-                        .foregroundColor(ApocalypseTheme.primary)
-                        .font(.title3)
-                }
-
-                // 中间信息
-                VStack(alignment: .leading, spacing: 6) {
-                    // 名称或默认名称
+            HStack(spacing: 12) {
+                // 左侧信息
+                VStack(alignment: .leading, spacing: 4) {
+                    // 名称
                     Text(territory.name ?? "未命名领地")
-                        .font(.headline)
-                        .foregroundColor(ApocalypseTheme.textPrimary)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white)
 
                     // 面积和路径点
-                    HStack(spacing: 12) {
-                        Label("\(formatArea(territory.area))", systemImage: "map")
-                            .font(.caption)
-                            .foregroundColor(ApocalypseTheme.textSecondary)
-
-                        if let pointCount = territory.pointCount {
-                            Label("\(pointCount) 点", systemImage: "location")
-                                .font(.caption)
-                                .foregroundColor(ApocalypseTheme.textSecondary)
+                    HStack(spacing: 16) {
+                        // 面积图标 + 数值
+                        HStack(spacing: 4) {
+                            Image(systemName: "map")
+                                .font(.system(size: 12))
+                            Text(formatArea(territory.area))
+                                .font(.system(size: 13))
                         }
-                    }
+                        .foregroundColor(.white.opacity(0.6))
 
-                    // 创建时间
-                    if let createdAt = territory.createdAt {
-                        Text(formatDate(createdAt))
-                            .font(.caption2)
-                            .foregroundColor(ApocalypseTheme.textMuted)
+                        // 路径点图标 + 数值
+                        if let pointCount = territory.pointCount {
+                            HStack(spacing: 4) {
+                                Image(systemName: "clock")
+                                    .font(.system(size: 12))
+                                Text("\(pointCount) 点")
+                                    .font(.system(size: 13))
+                            }
+                            .foregroundColor(.white.opacity(0.6))
+                        }
                     }
                 }
 
@@ -326,17 +296,14 @@ struct TerritoryListCard: View {
 
                 // 右侧箭头
                 Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(ApocalypseTheme.textMuted)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.4))
             }
-            .padding()
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(ApocalypseTheme.cardBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(ApocalypseTheme.primary.opacity(0.2), lineWidth: 1)
+                    .fill(.ultraThinMaterial)
             )
         }
         .buttonStyle(PlainButtonStyle())
@@ -349,18 +316,6 @@ struct TerritoryListCard: View {
         } else {
             return String(format: "%.0f m²", area)
         }
-    }
-
-    /// 格式化日期显示
-    private func formatDate(_ dateString: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        guard let date = formatter.date(from: dateString) else {
-            return dateString
-        }
-
-        let displayFormatter = DateFormatter()
-        displayFormatter.dateFormat = "yyyy-MM-dd HH:mm"
-        return displayFormatter.string(from: date)
     }
 }
 

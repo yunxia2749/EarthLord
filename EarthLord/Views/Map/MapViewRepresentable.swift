@@ -32,6 +32,9 @@ struct MapViewRepresentable: UIViewRepresentable {
     /// 已上传的领地列表
     var uploadedTerritories: [TerritoryData] = []
 
+    /// 当前用户ID（用于区分自己和他人的领地）
+    var currentUserId: String?
+
     // MARK: - UIViewRepresentable
 
     /// 创建MKMapView
@@ -241,10 +244,11 @@ struct MapViewRepresentable: UIViewRepresentable {
                 var coords = coordinates
                 let polygon = MKPolygon(coordinates: &coords, count: coords.count)
                 polygon.title = territory.id // 使用 title 存储领地 ID
+                polygon.subtitle = territory.userId // 使用 subtitle 存储用户 ID
                 mapView.addOverlay(polygon)
                 renderedTerritoryIds.insert(territory.id)
 
-                print("✅ [已上传领地] 添加领地: \(territory.id), 面积: \(territory.area)m²")
+                print("✅ [已上传领地] 添加领地: \(territory.id), 用户: \(territory.userId), 面积: \(territory.area)m²")
             }
 
             print("🏛️  [已上传领地] 更新完成，当前显示 \(renderedTerritoryIds.count) 个领地\n")
@@ -289,13 +293,27 @@ struct MapViewRepresentable: UIViewRepresentable {
 
                 // 判断是当前追踪路径还是已上传领地
                 if let territoryId = polygon.title {
-                    // 已上传的领地：绿色半透明
-                    print("🖌️  [地图渲染] 创建已上传领地渲染器: \(territoryId)")
-                    renderer.fillColor = UIColor.systemGreen.withAlphaComponent(0.25) // 半透明绿色填充
-                    renderer.strokeColor = UIColor.systemGreen.withAlphaComponent(0.8) // 绿色边框
-                    renderer.lineWidth = 2.0 // 边框宽度
+                    // 已上传的领地：根据用户ID决定颜色
+                    // 注意：UUID 比较需要忽略大小写（Swift 返回大写，数据库存储小写）
+                    let userId = polygon.subtitle?.lowercased()
+                    let currentId = parent.currentUserId?.lowercased()
+                    let isOwnTerritory = (userId != nil && userId == currentId)
+
+                    if isOwnTerritory {
+                        // 自己的领地：绿色
+                        print("🖌️  [地图渲染] 创建自己的领地渲染器: \(territoryId), userId=\(userId ?? "nil"), currentId=\(currentId ?? "nil")")
+                        renderer.fillColor = UIColor.systemGreen.withAlphaComponent(0.25) // 半透明绿色填充
+                        renderer.strokeColor = UIColor.systemGreen.withAlphaComponent(0.8) // 绿色边框
+                        renderer.lineWidth = 2.0 // 边框宽度
+                    } else {
+                        // 他人的领地：黄色
+                        print("🖌️  [地图渲染] 创建他人的领地渲染器: \(territoryId), userId=\(userId ?? "nil"), currentId=\(currentId ?? "nil")")
+                        renderer.fillColor = UIColor.systemYellow.withAlphaComponent(0.25) // 半透明黄色填充
+                        renderer.strokeColor = UIColor.systemYellow.withAlphaComponent(0.8) // 黄色边框
+                        renderer.lineWidth = 2.0 // 边框宽度
+                    }
                 } else {
-                    // 当前追踪路径：更亮的绿色
+                    // 当前追踪路径：绿色
                     print("🖌️  [地图渲染] 创建当前追踪路径多边形渲染器")
                     renderer.fillColor = UIColor.systemGreen.withAlphaComponent(0.3) // 稍微亮一些
                     renderer.strokeColor = UIColor.systemGreen // 绿色边框

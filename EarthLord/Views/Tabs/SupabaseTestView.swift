@@ -9,6 +9,7 @@ import SwiftUI
 import Supabase
 
 // 全局 Supabase 客户端实例
+// 注意：SDK 默认使用 KeychainLocalStorage 持久化 session
 let supabase = SupabaseClient(
     supabaseURL: URL(string: "https://kmfuiegtfpqvcfkfzfzw.supabase.co")!,
     supabaseKey: "sb_publishable_8TcGR_ajCs6TwukKADIzcQ_1OUMhERM"
