@@ -106,6 +106,12 @@ struct AuthView: View {
                 showToastMessage(error)
             }
         }
+        .onAppear {
+            // 恢复注册状态：如果已经发送了验证码但还没验证，恢复到验证步骤
+            if selectedTab == .register && authManager.otpSent && !authManager.otpVerified {
+                registerStep = .otpVerification
+            }
+        }
     }
 
     // MARK: - Background
@@ -224,6 +230,12 @@ struct AuthView: View {
                 text: $loginEmail,
                 keyboardType: .emailAddress
             )
+            .onChange(of: loginEmail) { newValue in
+                // 自动清理 mailto: 前缀
+                if newValue.lowercased().hasPrefix("mailto:") {
+                    loginEmail = String(newValue.dropFirst(7))
+                }
+            }
 
             // 密码输入
             CustomSecureField(
@@ -289,6 +301,12 @@ struct AuthView: View {
                 text: $registerEmail,
                 keyboardType: .emailAddress
             )
+            .onChange(of: registerEmail) { newValue in
+                // 自动清理 mailto: 前缀
+                if newValue.lowercased().hasPrefix("mailto:") {
+                    registerEmail = String(newValue.dropFirst(7))
+                }
+            }
 
             // 邮箱格式验证提示
             if !registerEmail.isEmpty {
@@ -546,6 +564,12 @@ struct AuthView: View {
                 text: $resetEmail,
                 keyboardType: .emailAddress
             )
+            .onChange(of: resetEmail) { newValue in
+                // 自动清理 mailto: 前缀
+                if newValue.lowercased().hasPrefix("mailto:") {
+                    resetEmail = String(newValue.dropFirst(7))
+                }
+            }
 
             // 邮箱格式验证提示
             if !resetEmail.isEmpty {
@@ -740,6 +764,11 @@ struct AuthView: View {
         await authManager.verifyRegisterOTP(email: registerEmail, code: registerOTP)
 
         // 验证成功后会通过 onChange(of: authManager.otpVerified) 自动跳转到密码设置
+        // 如果验证失败，错误信息会通过 authManager.errorMessage 显示
+        if !authManager.otpVerified && authManager.errorMessage == nil {
+            // 如果没有错误信息但验证失败，显示通用错误
+            showToastMessage("验证码错误，请重试")
+        }
     }
 
     /// 完成注册
