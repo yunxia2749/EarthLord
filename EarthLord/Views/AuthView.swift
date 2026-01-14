@@ -290,6 +290,18 @@ struct AuthView: View {
                 keyboardType: .emailAddress
             )
 
+            // 邮箱格式验证提示
+            if !registerEmail.isEmpty {
+                HStack {
+                    Image(systemName: authManager.isValidEmail(registerEmail) ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundColor(authManager.isValidEmail(registerEmail) ? .green : .red)
+                    Text(authManager.isValidEmail(registerEmail) ? "邮箱格式正确" : "请输入有效的邮箱地址")
+                        .font(.caption)
+                        .foregroundColor(authManager.isValidEmail(registerEmail) ? .green : .red)
+                }
+                .padding(.horizontal, 4)
+            }
+
             // 发送验证码按钮
             PrimaryButton(title: "发送验证码", icon: "paperplane.fill") {
                 Task {
@@ -534,6 +546,18 @@ struct AuthView: View {
                 text: $resetEmail,
                 keyboardType: .emailAddress
             )
+
+            // 邮箱格式验证提示
+            if !resetEmail.isEmpty {
+                HStack {
+                    Image(systemName: authManager.isValidEmail(resetEmail) ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundColor(authManager.isValidEmail(resetEmail) ? .green : .red)
+                    Text(authManager.isValidEmail(resetEmail) ? "邮箱格式正确" : "请输入有效的邮箱地址")
+                        .font(.caption)
+                        .foregroundColor(authManager.isValidEmail(resetEmail) ? .green : .red)
+                }
+                .padding(.horizontal, 4)
+            }
 
             PrimaryButton(title: "发送验证码", icon: "paperplane.fill") {
                 Task {
