@@ -2,58 +2,30 @@
 //  TerritoryTabView.swift
 //  EarthLord
 //
-//  领地页面：显示和管理玩家的领地
+//  Day 18: 领地列表页面
+//  显示和管理用户实际圈占的领地
 //
 
 import SwiftUI
 import MapKit
+import Supabase
 
+@MainActor
 struct TerritoryTabView: View {
 
     // MARK: - State Properties
 
-    /// 领地列表（示例数据）
-    @State private var territories: [Territory] = [
-        Territory(
-            name: "中央堡垒",
-            coordinate: CLLocationCoordinate2D(latitude: 39.9042, longitude: 116.4074),
-            level: 5,
-            population: 120,
-            maxPopulation: 150,
-            status: .thriving,
-            resources: [
-                TerritoryResource(type: "食物", productionRate: 45),
-                TerritoryResource(type: "水", productionRate: 30)
-            ]
-        ),
-        Territory(
-            name: "东方前哨",
-            coordinate: CLLocationCoordinate2D(latitude: 39.9142, longitude: 116.4174),
-            level: 3,
-            population: 45,
-            maxPopulation: 80,
-            status: .growing,
-            resources: [
-                TerritoryResource(type: "木材", productionRate: 20),
-                TerritoryResource(type: "石头", productionRate: 15)
-            ]
-        ),
-        Territory(
-            name: "西部矿场",
-            coordinate: CLLocationCoordinate2D(latitude: 39.8942, longitude: 116.3974),
-            level: 2,
-            population: 28,
-            maxPopulation: 50,
-            status: .developing,
-            resources: [
-                TerritoryResource(type: "金属", productionRate: 12),
-                TerritoryResource(type: "燃料", productionRate: 8)
-            ]
-        ),
-    ]
+    /// 领地列表（从Supabase加载）
+    @State private var territories: [TerritoryData] = []
+
+    /// 是否正在加载
+    @State private var isLoading = false
+
+    /// 错误消息
+    @State private var errorMessage: String?
 
     /// 当前选择的领地
-    @State private var selectedTerritory: Territory?
+    @State private var selectedTerritory: TerritoryData?
 
     /// 显示领地详情
     @State private var showTerritoryDetail = false
@@ -66,27 +38,52 @@ struct TerritoryTabView: View {
                 ApocalypseTheme.background
                     .ignoresSafeArea()
 
-                ScrollView {
-                    VStack(spacing: 24) {
-                        // 顶部统计卡片
-                        territoryStatsCard
+                if isLoading {
+                    // 加载指示器
+                    loadingView
+                } else if let error = errorMessage {
+                    // 错误视图
+                    errorView(message: error)
+                } else if territories.isEmpty {
+                    // 空状态
+                    emptyStateView
+                } else {
+                    // 领地列表
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            // 顶部统计卡片
+                            territoryStatsCard
 
-                        // 领地列表
-                        territoriesSection
+                            // 领地列表
+                            territoriesSection
 
-                        // 扩张提示
-                        expansionHint
-
-                        Spacer(minLength: 20)
+                            Spacer(minLength: 20)
+                        }
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
                 }
             }
-            .navigationTitle("领地")
+            .navigationTitle("我的领地")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: loadTerritories) {
+                        Image(systemName: "arrow.clockwise")
+                            .foregroundColor(ApocalypseTheme.primary)
+                    }
+                }
+            }
             .sheet(isPresented: $showTerritoryDetail) {
                 if let territory = selectedTerritory {
-                    TerritoryDetailView(territory: territory)
+                    TerritoryDetailSheetView(territory: territory) {
+                        // 删除后刷新列表
+                        loadTerritories()
+                    }
+                }
+            }
+            .onAppear {
+                if territories.isEmpty {
+                    loadTerritories()
                 }
             }
         }
@@ -94,13 +91,76 @@ struct TerritoryTabView: View {
 
     // MARK: - Subviews
 
+    /// 加载视图
+    private var loadingView: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .scaleEffect(1.5)
+                .tint(ApocalypseTheme.primary)
+
+            Text("加载领地中...")
+                .font(.subheadline)
+                .foregroundColor(ApocalypseTheme.textSecondary)
+        }
+    }
+
+    /// 错误视图
+    private func errorView(message: String) -> some View {
+        VStack(spacing: 20) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 60))
+                .foregroundColor(ApocalypseTheme.danger)
+
+            Text("加载失败")
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundColor(ApocalypseTheme.textPrimary)
+
+            Text(message)
+                .font(.body)
+                .foregroundColor(ApocalypseTheme.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+
+            Button(action: loadTerritories) {
+                Text("重试")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 30)
+                    .padding(.vertical, 12)
+                    .background(ApocalypseTheme.primary)
+                    .cornerRadius(8)
+            }
+        }
+    }
+
+    /// 空状态视图
+    private var emptyStateView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "map")
+                .font(.system(size: 80))
+                .foregroundColor(ApocalypseTheme.textMuted)
+
+            Text("还没有领地")
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundColor(ApocalypseTheme.textPrimary)
+
+            Text("前往地图页面圈占你的第一块领地吧！")
+                .font(.body)
+                .foregroundColor(ApocalypseTheme.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+        }
+    }
+
     /// 领地统计卡片
     private var territoryStatsCard: some View {
         HStack(spacing: 20) {
             // 领地数量
             StatItem(
                 icon: "flag.fill",
-                title: "领地数量",
+                title: "领地数",
                 value: "\(territories.count)",
                 color: ApocalypseTheme.primary
             )
@@ -109,11 +169,11 @@ struct TerritoryTabView: View {
                 .frame(height: 60)
                 .background(ApocalypseTheme.textMuted.opacity(0.3))
 
-            // 总人口
+            // 总面积
             StatItem(
-                icon: "person.3.fill",
-                title: "总人口",
-                value: "\(totalPopulation)",
+                icon: "map.fill",
+                title: "总面积",
+                value: formatArea(totalArea),
                 color: ApocalypseTheme.info
             )
 
@@ -121,11 +181,11 @@ struct TerritoryTabView: View {
                 .frame(height: 60)
                 .background(ApocalypseTheme.textMuted.opacity(0.3))
 
-            // 平均等级
+            // 总路径点
             StatItem(
-                icon: "star.fill",
-                title: "平均等级",
-                value: String(format: "%.1f", averageLevel),
+                icon: "location.fill",
+                title: "总路径点",
+                value: "\(totalPoints)",
                 color: ApocalypseTheme.warning
             )
         }
@@ -145,7 +205,7 @@ struct TerritoryTabView: View {
         VStack(alignment: .leading, spacing: 16) {
             // 标题
             HStack {
-                Text("我的领地")
+                Text("领地列表")
                     .font(.title3)
                     .fontWeight(.bold)
                     .foregroundColor(ApocalypseTheme.textPrimary)
@@ -160,7 +220,7 @@ struct TerritoryTabView: View {
             // 领地卡片列表
             VStack(spacing: 12) {
                 ForEach(territories) { territory in
-                    TerritoryCard(territory: territory) {
+                    TerritoryListCard(territory: territory) {
                         selectedTerritory = territory
                         showTerritoryDetail = true
                     }
@@ -169,202 +229,505 @@ struct TerritoryTabView: View {
         }
     }
 
-    /// 扩张提示
-    private var expansionHint: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "map.fill")
-                .font(.system(size: 40))
-                .foregroundColor(ApocalypseTheme.primary)
-
-            Text("探索地图发现新领地")
-                .font(.headline)
-                .foregroundColor(ApocalypseTheme.textPrimary)
-
-            Text("前往地图页面，圈占更多领地来扩张你的势力")
-                .font(.subheadline)
-                .foregroundColor(ApocalypseTheme.textSecondary)
-                .multilineTextAlignment(.center)
-
-            Button(action: {
-                // 跳转到地图页面的逻辑
-            }) {
-                Text("前往地图")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 12)
-                    .background(
-                        LinearGradient(
-                            colors: [ApocalypseTheme.primary, ApocalypseTheme.primaryDark],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .cornerRadius(12)
-            }
-        }
-        .padding(.vertical, 32)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(ApocalypseTheme.cardBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(ApocalypseTheme.primary.opacity(0.2), lineWidth: 1)
-        )
-    }
-
     // MARK: - Computed Properties
 
-    /// 总人口
-    private var totalPopulation: Int {
-        territories.reduce(0) { $0 + $1.population }
+    /// 总面积
+    private var totalArea: Double {
+        territories.reduce(0) { $0 + $1.area }
     }
 
-    /// 平均等级
-    private var averageLevel: Double {
-        let totalLevel = territories.reduce(0) { $0 + $1.level }
-        return territories.isEmpty ? 0 : Double(totalLevel) / Double(territories.count)
+    /// 总路径点
+    private var totalPoints: Int {
+        territories.reduce(0) { $0 + ($1.pointCount ?? 0) }
+    }
+
+    // MARK: - Methods
+
+    /// 加载领地列表
+    private func loadTerritories() {
+        isLoading = true
+        errorMessage = nil
+
+        Task {
+            do {
+                print("📥 [TerritoryTabView] 开始加载领地列表...")
+                territories = try await TerritoryManager.shared.loadAllTerritories()
+                print("✅ [TerritoryTabView] 加载成功，共 \(territories.count) 个领地")
+            } catch {
+                print("❌ [TerritoryTabView] 加载失败: \(error)")
+                errorMessage = "加载领地失败: \(error.localizedDescription)"
+            }
+            isLoading = false
+        }
+    }
+
+    /// 格式化面积显示
+    private func formatArea(_ area: Double) -> String {
+        if area >= 1_000_000 {
+            return String(format: "%.1f km²", area / 1_000_000)
+        } else if area >= 1000 {
+            return String(format: "%.0f m²", area)
+        } else {
+            return String(format: "%.1f m²", area)
+        }
     }
 }
 
-// MARK: - Territory Card
+// MARK: - Territory List Card
 
-/// 领地卡片
-struct TerritoryCard: View {
-    let territory: Territory
+/// 领地列表卡片
+struct TerritoryListCard: View {
+    let territory: TerritoryData
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 16) {
-                // 顶部：名称和等级
-                HStack {
-                    HStack(spacing: 12) {
-                        // 状态图标
-                        ZStack {
-                            Circle()
-                                .fill(territory.status.color.opacity(0.2))
-                                .frame(width: 44, height: 44)
+            HStack(spacing: 16) {
+                // 左侧图标
+                ZStack {
+                    Circle()
+                        .fill(ApocalypseTheme.primary.opacity(0.2))
+                        .frame(width: 50, height: 50)
 
-                            Image(systemName: "flag.fill")
-                                .foregroundColor(territory.status.color)
-                        }
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(territory.name)
-                                .font(.headline)
-                                .foregroundColor(ApocalypseTheme.textPrimary)
-
-                            Text(territory.status.displayName)
-                                .font(.caption)
-                                .foregroundColor(territory.status.color)
-                        }
-                    }
-
-                    Spacer()
-
-                    // 等级徽章
-                    HStack(spacing: 4) {
-                        Image(systemName: "star.fill")
-                            .font(.caption)
-                        Text("Lv.\(territory.level)")
-                            .font(.subheadline)
-                            .fontWeight(.bold)
-                    }
-                    .foregroundColor(ApocalypseTheme.warning)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(ApocalypseTheme.warning.opacity(0.2))
-                    .cornerRadius(12)
+                    Image(systemName: "flag.fill")
+                        .foregroundColor(ApocalypseTheme.primary)
+                        .font(.title3)
                 }
 
-                // 人口信息
-                VStack(spacing: 8) {
-                    HStack {
-                        Image(systemName: "person.3.fill")
-                            .font(.caption)
-                            .foregroundColor(ApocalypseTheme.info)
+                // 中间信息
+                VStack(alignment: .leading, spacing: 6) {
+                    // 名称或默认名称
+                    Text(territory.name ?? "未命名领地")
+                        .font(.headline)
+                        .foregroundColor(ApocalypseTheme.textPrimary)
 
-                        Text("人口: \(territory.population) / \(territory.maxPopulation)")
-                            .font(.subheadline)
+                    // 面积和路径点
+                    HStack(spacing: 12) {
+                        Label("\(formatArea(territory.area))", systemImage: "map")
+                            .font(.caption)
                             .foregroundColor(ApocalypseTheme.textSecondary)
 
-                        Spacer()
-                    }
-
-                    // 人口进度条
-                    GeometryReader { geometry in
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(ApocalypseTheme.background)
-                                .frame(height: 6)
-
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(
-                                    LinearGradient(
-                                        colors: [ApocalypseTheme.info, ApocalypseTheme.info.opacity(0.7)],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .frame(width: geometry.size.width * territory.populationPercentage, height: 6)
-                        }
-                    }
-                    .frame(height: 6)
-                }
-
-                // 资源产出
-                if !territory.resources.isEmpty {
-                    VStack(spacing: 8) {
-                        HStack {
-                            Image(systemName: "arrow.up.circle.fill")
+                        if let pointCount = territory.pointCount {
+                            Label("\(pointCount) 点", systemImage: "location")
                                 .font(.caption)
-                                .foregroundColor(ApocalypseTheme.success)
-
-                            Text("资源产出")
-                                .font(.subheadline)
                                 .foregroundColor(ApocalypseTheme.textSecondary)
-
-                            Spacer()
-                        }
-
-                        // 资源列表
-                        HStack(spacing: 12) {
-                            ForEach(territory.resources) { resource in
-                                HStack(spacing: 4) {
-                                    Text(resource.type)
-                                        .font(.caption)
-                                        .foregroundColor(ApocalypseTheme.textSecondary)
-
-                                    Text("+\(resource.productionRate)/h")
-                                        .font(.caption)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(ApocalypseTheme.success)
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(ApocalypseTheme.success.opacity(0.1))
-                                .cornerRadius(8)
-                            }
-
-                            Spacer()
                         }
                     }
+
+                    // 创建时间
+                    if let createdAt = territory.createdAt {
+                        Text(formatDate(createdAt))
+                            .font(.caption2)
+                            .foregroundColor(ApocalypseTheme.textMuted)
+                    }
                 }
+
+                Spacer()
+
+                // 右侧箭头
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(ApocalypseTheme.textMuted)
             }
             .padding()
             .background(
-                RoundedRectangle(cornerRadius: 16)
+                RoundedRectangle(cornerRadius: 12)
                     .fill(ApocalypseTheme.cardBackground)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(territory.status.color.opacity(0.3), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(ApocalypseTheme.primary.opacity(0.2), lineWidth: 1)
             )
         }
         .buttonStyle(PlainButtonStyle())
+    }
+
+    /// 格式化面积显示
+    private func formatArea(_ area: Double) -> String {
+        if area >= 1_000_000 {
+            return String(format: "%.1f km²", area / 1_000_000)
+        } else {
+            return String(format: "%.0f m²", area)
+        }
+    }
+
+    /// 格式化日期显示
+    private func formatDate(_ dateString: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        guard let date = formatter.date(from: dateString) else {
+            return dateString
+        }
+
+        let displayFormatter = DateFormatter()
+        displayFormatter.dateFormat = "yyyy-MM-dd HH:mm"
+        return displayFormatter.string(from: date)
+    }
+}
+
+// MARK: - Territory Detail Sheet View
+
+/// 领地详情底部弹窗
+struct TerritoryDetailSheetView: View {
+    let territory: TerritoryData
+    let onDelete: () -> Void
+
+    @Environment(\.dismiss) var dismiss
+    @State private var showDeleteAlert = false
+    @State private var isDeleting = false
+
+    var body: some View {
+        ZStack {
+            // 深蓝色背景
+            Color(red: 0.1, green: 0.12, blue: 0.18)
+                .ignoresSafeArea()
+
+            ScrollView {
+                VStack(spacing: 20) {
+                    // 顶部栏：关闭按钮 + 标题
+                    ZStack {
+                        // 左侧关闭按钮
+                        HStack {
+                            Button(action: {
+                                dismiss()
+                            }) {
+                                Text("关闭")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(ApocalypseTheme.primary)
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 10)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 20)
+                                            .fill(Color(red: 0.15, green: 0.17, blue: 0.23))
+                                    )
+                            }
+                            .padding(.leading, 16)
+
+                            Spacer()
+                        }
+
+                        // 中间标题
+                        Text(territory.name ?? "未命名领地")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                    .padding(.top, 16)
+
+                    // 地图预览
+                    TerritoryMapPreview(territory: territory)
+                        .frame(height: 280)
+                        .cornerRadius(16)
+                        .padding(.horizontal, 16)
+                        .onAppear {
+                            print("📱 [TerritoryDetailSheetView] 地图预览出现")
+                            print("   - 领地ID: \(territory.id)")
+                            print("   - 面积: \(territory.area)")
+                            print("   - 路径点数: \(territory.pointCount ?? 0)")
+                        }
+
+                    // 领地信息标题
+                    HStack {
+                        Text("领地信息")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.white)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+
+                    // 领地信息卡片
+                    VStack(spacing: 16) {
+                        // 面积
+                        TerritoryInfoRow(
+                            icon: "map.fill",
+                            title: "面积",
+                            value: formatArea(territory.area)
+                        )
+
+                        // 路径点数
+                        if let pointCount = territory.pointCount {
+                            TerritoryInfoRow(
+                                icon: "location.circle.fill",
+                                title: "路径点",
+                                value: "\(pointCount) 个"
+                            )
+                        }
+
+                        // 创建时间
+                        if let createdAt = territory.createdAt {
+                            TerritoryInfoRow(
+                                icon: "clock.fill",
+                                title: "创建时间",
+                                value: formatDate(createdAt)
+                            )
+                        }
+                    }
+                    .padding(.vertical, 16)
+                    .padding(.horizontal, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color(red: 0.15, green: 0.17, blue: 0.23))
+                    )
+                    .padding(.horizontal, 16)
+
+                    // 删除按钮
+                    Button(action: {
+                        showDeleteAlert = true
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "trash.fill")
+                                .font(.system(size: 16))
+                            Text("删除领地")
+                                .font(.system(size: 17, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color.red)
+                        .cornerRadius(12)
+                    }
+                    .padding(.horizontal, 16)
+                    .disabled(isDeleting)
+
+                    // 更多功能区域
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("更多功能")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+
+                        VStack(spacing: 12) {
+                            // 重命名领地
+                            FeatureButton(
+                                icon: "pencil",
+                                title: "重命名领地",
+                                badge: "敬请期待"
+                            )
+
+                            // 建筑系统
+                            FeatureButton(
+                                icon: "building.2.fill",
+                                title: "建筑系统",
+                                badge: "敬请期待"
+                            )
+
+                            // 领地交易
+                            FeatureButton(
+                                icon: "arrow.left.arrow.right",
+                                title: "领地交易",
+                                badge: "敬请期待"
+                            )
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                    .padding(.top, 8)
+
+                    Spacer(minLength: 40)
+                }
+                .padding(.top, 8)
+            }
+        }
+        .alert("确认删除", isPresented: $showDeleteAlert) {
+            Button("取消", role: .cancel) {}
+            Button("删除", role: .destructive) {
+                deleteTerritory()
+            }
+        } message: {
+            Text("确定要删除这个领地吗？此操作无法撤销。")
+        }
+    }
+
+    /// 删除领地
+    private func deleteTerritory() {
+        isDeleting = true
+
+        Task {
+            do {
+                // TODO: 实现删除领地的API调用
+                try await supabase
+                    .from("territories")
+                    .delete()
+                    .eq("id", value: territory.id)
+                    .execute()
+
+                print("✅ [TerritoryDetailSheetView] 领地删除成功")
+
+                await MainActor.run {
+                    dismiss()
+                    onDelete()
+                }
+            } catch {
+                print("❌ [TerritoryDetailSheetView] 领地删除失败: \(error)")
+                // TODO: 显示错误提示
+            }
+            isDeleting = false
+        }
+    }
+
+    /// 格式化面积显示
+    private func formatArea(_ area: Double) -> String {
+        if area >= 1_000_000 {
+            return String(format: "%.2f km²", area / 1_000_000)
+        } else {
+            return String(format: "%.0f m²", area)
+        }
+    }
+
+    /// 格式化日期显示
+    private func formatDate(_ dateString: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        guard let date = formatter.date(from: dateString) else {
+            return dateString
+        }
+
+        let displayFormatter = DateFormatter()
+        displayFormatter.dateStyle = .medium
+        displayFormatter.timeStyle = .short
+        return displayFormatter.string(from: date)
+    }
+}
+
+// MARK: - Territory Map Preview
+
+/// 领地地图预览
+struct TerritoryMapPreview: View {
+    let territory: TerritoryData
+
+    var body: some View {
+        let coordinates = territory.toCoordinates()
+
+        if coordinates.count >= 3 {
+            // 有效的坐标数据，显示地图
+            TerritoryMapKitView(territory: territory)
+                .cornerRadius(16)
+        } else {
+            // 坐标数据不足，显示错误提示
+            ZStack {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.gray.opacity(0.2))
+
+                VStack(spacing: 12) {
+                    Image(systemName: "map.fill")
+                        .font(.system(size: 50))
+                        .foregroundColor(.gray)
+
+                    Text("地图数据加载失败")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+
+                    Text("坐标点数: \(coordinates.count)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+    }
+}
+
+/// MapKit 地图视图（用于绘制多边形）
+struct TerritoryMapKitView: UIViewRepresentable {
+    let territory: TerritoryData
+
+    func makeUIView(context: Context) -> MKMapView {
+        print("🗺️ [TerritoryMapKitView] 创建地图视图，领地ID: \(territory.id)")
+        let mapView = MKMapView()
+        mapView.delegate = context.coordinator
+        mapView.mapType = .standard
+        mapView.isZoomEnabled = true
+        mapView.isScrollEnabled = true
+        return mapView
+    }
+
+    func updateUIView(_ mapView: MKMapView, context: Context) {
+        print("🔄 [TerritoryMapKitView] 更新地图视图")
+
+        // 移除旧的 overlays
+        mapView.removeOverlays(mapView.overlays)
+
+        // 添加多边形
+        let coordinates = territory.toCoordinates()
+        print("📍 [TerritoryMapKitView] 坐标点数: \(coordinates.count)")
+
+        guard coordinates.count >= 3 else {
+            print("⚠️ [TerritoryMapKitView] 坐标点少于3个，无法绘制多边形")
+            // 设置一个默认区域
+            mapView.setRegion(MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: 0, longitude: 0),
+                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+            ), animated: false)
+            return
+        }
+
+        var coords = coordinates
+        let polygon = MKPolygon(coordinates: &coords, count: coords.count)
+        mapView.addOverlay(polygon)
+        print("✅ [TerritoryMapKitView] 已添加多边形 overlay")
+
+        // 设置地图区域
+        let centerLat = coordinates.reduce(0) { $0 + $1.latitude } / Double(coordinates.count)
+        let centerLon = coordinates.reduce(0) { $0 + $1.longitude } / Double(coordinates.count)
+
+        let lats = coordinates.map { $0.latitude }
+        let lons = coordinates.map { $0.longitude }
+        let latDelta = (lats.max() ?? 0) - (lats.min() ?? 0)
+        let lonDelta = (lons.max() ?? 0) - (lons.min() ?? 0)
+
+        let region = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: centerLat, longitude: centerLon),
+            span: MKCoordinateSpan(
+                latitudeDelta: max(latDelta * 1.5, 0.005),
+                longitudeDelta: max(lonDelta * 1.5, 0.005)
+            )
+        )
+
+        print("🎯 [TerritoryMapKitView] 设置地图区域: 中心(\(centerLat), \(centerLon)), 跨度(\(region.span.latitudeDelta), \(region.span.longitudeDelta))")
+        mapView.setRegion(region, animated: false)
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    class Coordinator: NSObject, MKMapViewDelegate {
+        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            print("🎨 [TerritoryMapKitView] 渲染 overlay")
+            if let polygon = overlay as? MKPolygon {
+                let renderer = MKPolygonRenderer(polygon: polygon)
+                // 使用固定的 UIColor 而不是从 SwiftUI Color 转换
+                renderer.fillColor = UIColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 0.3) // 蓝色
+                renderer.strokeColor = UIColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 1.0)
+                renderer.lineWidth = 2
+                print("✅ [TerritoryMapKitView] Polygon renderer 创建成功")
+                return renderer
+            }
+            return MKOverlayRenderer(overlay: overlay)
+        }
+    }
+}
+
+// MARK: - Info Row
+
+/// 信息行
+struct InfoRow: View {
+    let icon: String
+    let title: String
+    let value: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Image(systemName: icon)
+                .foregroundColor(color)
+                .frame(width: 24)
+
+            Text(title)
+                .foregroundColor(ApocalypseTheme.textSecondary)
+
+            Spacer()
+
+            Text(value)
+                .foregroundColor(ApocalypseTheme.textPrimary)
+                .fontWeight(.medium)
+        }
     }
 }
 
@@ -396,191 +759,76 @@ struct StatItem: View {
     }
 }
 
-// MARK: - Territory Detail View
+// MARK: - Territory Info Row
 
-/// 领地详情页面
-struct TerritoryDetailView: View {
-    let territory: Territory
-    @Environment(\.dismiss) var dismiss
-
-    var body: some View {
-        NavigationView {
-            ZStack {
-                ApocalypseTheme.background.ignoresSafeArea()
-
-                ScrollView {
-                    VStack(spacing: 24) {
-                        // 领地信息
-                        VStack(spacing: 20) {
-                            // 图标
-                            ZStack {
-                                Circle()
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [territory.status.color, territory.status.color.opacity(0.7)],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .frame(width: 100, height: 100)
-
-                                Image(systemName: "flag.fill")
-                                    .font(.system(size: 40))
-                                    .foregroundColor(.white)
-                            }
-                            .shadow(color: territory.status.color.opacity(0.5), radius: 20)
-
-                            // 名称和状态
-                            VStack(spacing: 8) {
-                                Text(territory.name)
-                                    .font(.title)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(ApocalypseTheme.textPrimary)
-
-                                HStack(spacing: 8) {
-                                    Image(systemName: "star.fill")
-                                    Text("等级 \(territory.level)")
-                                }
-                                .font(.subheadline)
-                                .foregroundColor(ApocalypseTheme.warning)
-
-                                Text(territory.status.displayName)
-                                    .font(.subheadline)
-                                    .foregroundColor(territory.status.color)
-                            }
-                        }
-                        .padding(.top, 20)
-
-                        // 详细信息卡片
-                        VStack(spacing: 0) {
-                            DetailRow(icon: "person.3.fill", title: "人口", value: "\(territory.population) / \(territory.maxPopulation)", showDivider: true)
-                            DetailRow(icon: "location.fill", title: "坐标", value: String(format: "%.4f, %.4f", territory.coordinate.latitude, territory.coordinate.longitude), showDivider: false)
-                        }
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(ApocalypseTheme.cardBackground)
-                        )
-
-                        // 资源产出
-                        if !territory.resources.isEmpty {
-                            VStack(alignment: .leading, spacing: 16) {
-                                Text("资源产出")
-                                    .font(.headline)
-                                    .foregroundColor(ApocalypseTheme.textPrimary)
-
-                                VStack(spacing: 0) {
-                                    ForEach(Array(territory.resources.enumerated()), id: \.element.id) { index, resource in
-                                        DetailRow(
-                                            icon: "arrow.up.circle.fill",
-                                            title: resource.type,
-                                            value: "+\(resource.productionRate)/小时",
-                                            showDivider: index < territory.resources.count - 1
-                                        )
-                                    }
-                                }
-                                .background(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .fill(ApocalypseTheme.cardBackground)
-                                )
-                            }
-                        }
-
-                        Spacer()
-                    }
-                    .padding()
-                }
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("完成") {
-                        dismiss()
-                    }
-                    .foregroundColor(ApocalypseTheme.primary)
-                }
-            }
-        }
-    }
-}
-
-/// 详情行
-struct DetailRow: View {
+/// 领地信息行（橙色图标+白色文字）
+struct TerritoryInfoRow: View {
     let icon: String
     let title: String
     let value: String
-    let showDivider: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 16) {
+        HStack(spacing: 12) {
+            // 橙色图标
+            Image(systemName: icon)
+                .font(.system(size: 18))
+                .foregroundColor(ApocalypseTheme.primary)
+                .frame(width: 24)
+
+            // 标题
+            Text(title)
+                .font(.system(size: 15))
+                .foregroundColor(.white)
+
+            Spacer()
+
+            // 值
+            Text(value)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundColor(.white)
+        }
+    }
+}
+
+// MARK: - Feature Button
+
+/// 功能按钮（灰色背景+白色文字+右侧标注）
+struct FeatureButton: View {
+    let icon: String
+    let title: String
+    let badge: String
+
+    var body: some View {
+        Button(action: {
+            // 暂无功能
+        }) {
+            HStack(spacing: 12) {
+                // 图标
                 Image(systemName: icon)
-                    .foregroundColor(ApocalypseTheme.primary)
+                    .font(.system(size: 18))
+                    .foregroundColor(.white)
                     .frame(width: 24)
 
+                // 标题
                 Text(title)
-                    .foregroundColor(ApocalypseTheme.textSecondary)
+                    .font(.system(size: 15))
+                    .foregroundColor(.white)
 
                 Spacer()
 
-                Text(value)
-                    .foregroundColor(ApocalypseTheme.textPrimary)
-                    .fontWeight(.medium)
+                // 标注
+                Text(badge)
+                    .font(.system(size: 13))
+                    .foregroundColor(.gray)
             }
-            .padding()
-
-            if showDivider {
-                Divider()
-                    .background(ApocalypseTheme.textMuted.opacity(0.2))
-                    .padding(.leading, 56)
-            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(red: 0.15, green: 0.17, blue: 0.23))
+            )
         }
-    }
-}
-
-// MARK: - Models
-
-/// 领地数据模型
-struct Territory: Identifiable {
-    let id = UUID()
-    let name: String
-    let coordinate: CLLocationCoordinate2D
-    let level: Int
-    let population: Int
-    let maxPopulation: Int
-    let status: TerritoryStatus
-    let resources: [TerritoryResource]
-
-    /// 人口百分比
-    var populationPercentage: Double {
-        return maxPopulation > 0 ? Double(population) / Double(maxPopulation) : 0
-    }
-}
-
-/// 领地资源
-struct TerritoryResource: Identifiable {
-    let id = UUID()
-    let type: String
-    let productionRate: Int
-}
-
-/// 领地状态
-enum TerritoryStatus: String {
-    case thriving = "繁荣发展"
-    case growing = "成长中"
-    case developing = "开发中"
-    case struggling = "艰难维持"
-
-    var displayName: String {
-        rawValue
-    }
-
-    var color: Color {
-        switch self {
-        case .thriving: return ApocalypseTheme.success
-        case .growing: return ApocalypseTheme.info
-        case .developing: return ApocalypseTheme.warning
-        case .struggling: return ApocalypseTheme.danger
-        }
+        .disabled(true)
     }
 }
 

@@ -29,6 +29,9 @@ struct MapViewRepresentable: UIViewRepresentable {
     /// 路径是否已闭环
     var isPathClosed: Bool
 
+    /// 已上传的领地列表
+    var uploadedTerritories: [TerritoryData] = []
+
     // MARK: - UIViewRepresentable
 
     /// 创建MKMapView
@@ -61,6 +64,9 @@ struct MapViewRepresentable: UIViewRepresentable {
 
         // ⭐ 关键：当路径坐标、版本号或闭环状态更新时，重新绘制轨迹
         context.coordinator.updateTrackingPath(on: uiView, coordinates: pathCoordinates, version: pathUpdateVersion)
+
+        // ⭐ 绘制已上传的领地
+        context.coordinator.updateUploadedTerritories(on: uiView, territories: uploadedTerritories)
     }
 
     /// 创建协调器
@@ -146,14 +152,24 @@ struct MapViewRepresentable: UIViewRepresentable {
 
         // MARK: - Path Tracking
 
+        /// 已绘制的领地 ID 集合（用于避免重复绘制）
+        private var renderedTerritoryIds: Set<String> = []
+
         /// 更新追踪路径
         /// - Parameters:
         ///   - mapView: 地图视图
         ///   - coordinates: 路径坐标数组
         ///   - version: 路径版本号（用于强制更新）
         func updateTrackingPath(on mapView: MKMapView, coordinates: [CLLocationCoordinate2D], version: Int) {
-            // 移除旧的覆盖层（路径线和多边形）
-            mapView.removeOverlays(mapView.overlays)
+            // 移除当前追踪路径的 overlays（但保留已上传领地的 overlays）
+            mapView.overlays.forEach { overlay in
+                // 只移除 MKPolyline 和没有 title 的 MKPolygon（当前追踪路径）
+                if overlay is MKPolyline {
+                    mapView.removeOverlay(overlay)
+                } else if let polygon = overlay as? MKPolygon, polygon.title == nil {
+                    mapView.removeOverlay(overlay)
+                }
+            }
 
             // 如果没有坐标点，直接返回
             guard coordinates.count >= 2 else {
@@ -188,9 +204,55 @@ struct MapViewRepresentable: UIViewRepresentable {
             print("🎨 [地图渲染] ========== 绘制完成 ==========\n")
         }
 
+        /// 更新已上传的领地
+        /// - Parameters:
+        ///   - mapView: 地图视图
+        ///   - territories: 领地列表
+        func updateUploadedTerritories(on mapView: MKMapView, territories: [TerritoryData]) {
+            print("\n🏛️  [已上传领地] 开始更新，领地数: \(territories.count)")
+
+            // 当前领地 ID 集合
+            let currentTerritoryIds = Set(territories.map { $0.id })
+
+            // 移除不在当前列表中的领地
+            mapView.overlays.forEach { overlay in
+                if let polygon = overlay as? MKPolygon,
+                   let territoryId = polygon.title,
+                   !currentTerritoryIds.contains(territoryId) {
+                    mapView.removeOverlay(overlay)
+                    renderedTerritoryIds.remove(territoryId)
+                    print("🗑️  [已上传领地] 移除领地: \(territoryId)")
+                }
+            }
+
+            // 添加新领地
+            for territory in territories {
+                // 跳过已绘制的领地
+                guard !renderedTerritoryIds.contains(territory.id) else {
+                    continue
+                }
+
+                let coordinates = territory.toCoordinates()
+                guard coordinates.count >= 3 else {
+                    print("⚠️  [已上传领地] 领地 \(territory.id) 坐标点不足3个，跳过")
+                    continue
+                }
+
+                var coords = coordinates
+                let polygon = MKPolygon(coordinates: &coords, count: coords.count)
+                polygon.title = territory.id // 使用 title 存储领地 ID
+                mapView.addOverlay(polygon)
+                renderedTerritoryIds.insert(territory.id)
+
+                print("✅ [已上传领地] 添加领地: \(territory.id), 面积: \(territory.area)m²")
+            }
+
+            print("🏛️  [已上传领地] 更新完成，当前显示 \(renderedTerritoryIds.count) 个领地\n")
+        }
+
         /// ⭐ 关键方法：渲染覆盖层（绘制路径线条和多边形）
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            // 如果是路径线
+            // 如果是路径线（当前追踪路径）
             if let polyline = overlay as? MKPolyline {
                 print("🖌️  [地图渲染] 创建路径渲染器")
 
@@ -223,18 +285,24 @@ struct MapViewRepresentable: UIViewRepresentable {
 
             // 如果是多边形
             if let polygon = overlay as? MKPolygon {
-                print("🖌️  [地图渲染] 创建多边形渲染器")
-
                 let renderer = MKPolygonRenderer(polygon: polygon)
 
-                // 多边形样式
-                renderer.fillColor = UIColor.systemGreen.withAlphaComponent(0.25) // 半透明绿色填充
-                renderer.strokeColor = UIColor.systemGreen // 绿色边框
-                renderer.lineWidth = 2.0 // 边框宽度
+                // 判断是当前追踪路径还是已上传领地
+                if let territoryId = polygon.title {
+                    // 已上传的领地：绿色半透明
+                    print("🖌️  [地图渲染] 创建已上传领地渲染器: \(territoryId)")
+                    renderer.fillColor = UIColor.systemGreen.withAlphaComponent(0.25) // 半透明绿色填充
+                    renderer.strokeColor = UIColor.systemGreen.withAlphaComponent(0.8) // 绿色边框
+                    renderer.lineWidth = 2.0 // 边框宽度
+                } else {
+                    // 当前追踪路径：更亮的绿色
+                    print("🖌️  [地图渲染] 创建当前追踪路径多边形渲染器")
+                    renderer.fillColor = UIColor.systemGreen.withAlphaComponent(0.3) // 稍微亮一些
+                    renderer.strokeColor = UIColor.systemGreen // 绿色边框
+                    renderer.lineWidth = 2.5 // 稍微粗一些
+                }
 
                 print("✅ [地图渲染] 多边形样式已配置")
-                print("   - 填充色: 半透明绿色")
-                print("   - 边框色: 绿色")
 
                 return renderer
             }

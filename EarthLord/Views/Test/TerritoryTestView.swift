@@ -196,9 +196,9 @@ struct TerritoryTestView: View {
                 .foregroundColor(ApocalypseTheme.textSecondary)
 
             VStack(spacing: 12) {
-                InfoRow(label: "状态", value: locationManager.isTracking ? "追踪中" : "未追踪")
-                InfoRow(label: "记录点数", value: "\(locationManager.pathCoordinates.count) 个")
-                InfoRow(label: "闭环状态", value: locationManager.isPathClosed ? "已闭环" : "未闭环")
+                TestInfoRow(label: "状态", value: locationManager.isTracking ? "追踪中" : "未追踪")
+                TestInfoRow(label: "记录点数", value: "\(locationManager.pathCoordinates.count) 个")
+                TestInfoRow(label: "闭环状态", value: locationManager.isPathClosed ? "已闭环" : "未闭环")
             }
             .padding()
             .background(ApocalypseTheme.cardBackground)
@@ -240,8 +240,8 @@ struct LogEntryRow: View {
     }
 }
 
-/// 信息行
-struct InfoRow: View {
+/// 信息行（测试视图专用）
+private struct TestInfoRow: View {
     let label: String
     let value: String
 

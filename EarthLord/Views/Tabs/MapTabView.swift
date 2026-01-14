@@ -40,6 +40,9 @@ struct MapTabView: View {
     /// 是否显示成功提示
     @State private var showSuccessMessage = false
 
+    /// 已上传的领地列表（在地图上显示）
+    @State private var uploadedTerritories: [TerritoryData] = []
+
     // MARK: - Body
 
     var body: some View {
@@ -51,7 +54,8 @@ struct MapTabView: View {
                     hasLocatedUser: $hasLocatedUser,
                     pathCoordinates: $locationManager.pathCoordinates,
                     pathUpdateVersion: $locationManager.pathUpdateVersion,
-                    isPathClosed: locationManager.isPathClosed
+                    isPathClosed: locationManager.isPathClosed,
+                    uploadedTerritories: uploadedTerritories
                 )
                 .ignoresSafeArea(.all, edges: [.top, .leading, .trailing])
             } else {
@@ -119,6 +123,9 @@ struct MapTabView: View {
             } else if locationManager.isAuthorized {
                 locationManager.startUpdatingLocation()
             }
+
+            // 加载已上传的领地
+            loadUploadedTerritories()
         }
         // ⭐ 监听闭环状态，闭环后根据验证结果显示横幅
         .onReceive(locationManager.$isPathClosed) { isClosed in
@@ -480,6 +487,9 @@ struct MapTabView: View {
             // ⚠️ 关键：上传成功后必须停止追踪！
             locationManager.stopPathTracking()
 
+            // ⭐ 重新加载领地列表，在地图上显示新上传的领地
+            loadUploadedTerritories()
+
         } catch {
             print("❌ [MapTabView] 上传失败: \(error.localizedDescription)")
             await MainActor.run {
@@ -490,6 +500,22 @@ struct MapTabView: View {
 
         await MainActor.run {
             isUploading = false
+        }
+    }
+
+    /// 加载已上传的领地列表
+    private func loadUploadedTerritories() {
+        Task {
+            do {
+                print("📥 [MapTabView] 开始加载已上传的领地列表")
+                let territories = try await TerritoryManager.shared.loadAllTerritories()
+                await MainActor.run {
+                    uploadedTerritories = territories
+                    print("✅ [MapTabView] 已加载 \(territories.count) 个领地")
+                }
+            } catch {
+                print("❌ [MapTabView] 加载领地失败: \(error.localizedDescription)")
+            }
         }
     }
 

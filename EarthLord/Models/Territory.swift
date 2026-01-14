@@ -32,6 +32,9 @@ struct TerritoryData: Codable, Identifiable {
     /// 是否激活（可选）
     let isActive: Bool?
 
+    /// 创建时间
+    let createdAt: String?
+
     /// 编码键映射
     enum CodingKeys: String, CodingKey {
         case id
@@ -41,14 +44,21 @@ struct TerritoryData: Codable, Identifiable {
         case area
         case pointCount = "point_count"
         case isActive = "is_active"
+        case createdAt = "created_at"
     }
 
     /// 将 path 转换为 CLLocationCoordinate2D 数组
     /// - Returns: 坐标数组
     func toCoordinates() -> [CLLocationCoordinate2D] {
-        return path.compactMap { point in
-            guard let lat = point["lat"], let lon = point["lon"] else { return nil }
+        print("🔍 [TerritoryData] 开始转换坐标，path 数组长度: \(path.count)")
+        let coordinates = path.compactMap { point -> CLLocationCoordinate2D? in
+            guard let lat = point["lat"], let lon = point["lon"] else {
+                print("⚠️ [TerritoryData] 坐标点缺少 lat 或 lon: \(point)")
+                return nil
+            }
             return CLLocationCoordinate2D(latitude: lat, longitude: lon)
         }
+        print("✅ [TerritoryData] 成功转换 \(coordinates.count) 个坐标点")
+        return coordinates
     }
 }
