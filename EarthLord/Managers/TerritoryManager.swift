@@ -21,6 +21,11 @@ class TerritoryManager: ObservableObject {
 
     private init() {}
 
+    // MARK: - Properties
+
+    /// 已加载的领地列表（用于碰撞检测）
+    @Published var territories: [TerritoryData] = []
+
     // MARK: - Upload Data Structure
 
     /// 上传领地的数据结构
@@ -197,7 +202,7 @@ class TerritoryManager: ObservableObject {
         print("📥 [TerritoryManager] 开始加载领地列表")
 
         do {
-            let territories: [TerritoryData] = try await supabase
+            let loadedTerritories: [TerritoryData] = try await supabase
                 .from("territories")
                 .select()
                 .eq("is_active", value: true)
@@ -205,11 +210,206 @@ class TerritoryManager: ObservableObject {
                 .execute()
                 .value
 
-            print("✅ [TerritoryManager] 加载成功，共 \(territories.count) 个领地")
-            return territories
+            // 更新本地缓存（用于碰撞检测）
+            self.territories = loadedTerritories
+
+            print("✅ [TerritoryManager] 加载成功，共 \(loadedTerritories.count) 个领地")
+            return loadedTerritories
         } catch {
             print("❌ [TerritoryManager] 加载领地失败: \(error)")
             throw error
         }
+    }
+
+    // MARK: - 碰撞检测算法
+
+    /// 射线法判断点是否在多边形内
+    func isPointInPolygon(point: CLLocationCoordinate2D, polygon: [CLLocationCoordinate2D]) -> Bool {
+        guard polygon.count >= 3 else { return false }
+
+        var inside = false
+        let x = point.longitude
+        let y = point.latitude
+
+        var j = polygon.count - 1
+        for i in 0..<polygon.count {
+            let xi = polygon[i].longitude
+            let yi = polygon[i].latitude
+            let xj = polygon[j].longitude
+            let yj = polygon[j].latitude
+
+            let intersect = ((yi > y) != (yj > y)) &&
+                           (x < (xj - xi) * (y - yi) / (yj - yi) + xi)
+
+            if intersect {
+                inside.toggle()
+            }
+            j = i
+        }
+
+        return inside
+    }
+
+    /// 检查起始点是否在他人领地内
+    func checkPointCollision(location: CLLocationCoordinate2D, currentUserId: String) -> CollisionResult {
+        let otherTerritories = territories.filter { territory in
+            territory.userId.lowercased() != currentUserId.lowercased()
+        }
+
+        guard !otherTerritories.isEmpty else {
+            return .safe
+        }
+
+        for territory in otherTerritories {
+            let polygon = territory.toCoordinates()
+            guard polygon.count >= 3 else { continue }
+
+            if isPointInPolygon(point: location, polygon: polygon) {
+                TerritoryLogger.shared.log("起点碰撞：位于他人领地内", type: .error)
+                return CollisionResult(
+                    hasCollision: true,
+                    collisionType: .pointInTerritory,
+                    message: "不能在他人领地内开始圈地！",
+                    closestDistance: 0,
+                    warningLevel: .violation
+                )
+            }
+        }
+
+        return .safe
+    }
+
+    /// 判断两条线段是否相交（CCW 算法）
+    private func segmentsIntersect(
+        p1: CLLocationCoordinate2D, p2: CLLocationCoordinate2D,
+        p3: CLLocationCoordinate2D, p4: CLLocationCoordinate2D
+    ) -> Bool {
+        func ccw(_ A: CLLocationCoordinate2D, _ B: CLLocationCoordinate2D, _ C: CLLocationCoordinate2D) -> Bool {
+            return (C.latitude - A.latitude) * (B.longitude - A.longitude) >
+                   (B.latitude - A.latitude) * (C.longitude - A.longitude)
+        }
+
+        return ccw(p1, p3, p4) != ccw(p2, p3, p4) && ccw(p1, p2, p3) != ccw(p1, p2, p4)
+    }
+
+    /// 检查路径是否穿越他人领地边界
+    func checkPathCrossTerritory(path: [CLLocationCoordinate2D], currentUserId: String) -> CollisionResult {
+        guard path.count >= 2 else { return .safe }
+
+        let otherTerritories = territories.filter { territory in
+            territory.userId.lowercased() != currentUserId.lowercased()
+        }
+
+        guard !otherTerritories.isEmpty else { return .safe }
+
+        for i in 0..<(path.count - 1) {
+            let pathStart = path[i]
+            let pathEnd = path[i + 1]
+
+            for territory in otherTerritories {
+                let polygon = territory.toCoordinates()
+                guard polygon.count >= 3 else { continue }
+
+                // 检查与领地每条边的相交
+                for j in 0..<polygon.count {
+                    let boundaryStart = polygon[j]
+                    let boundaryEnd = polygon[(j + 1) % polygon.count]
+
+                    if segmentsIntersect(p1: pathStart, p2: pathEnd, p3: boundaryStart, p4: boundaryEnd) {
+                        TerritoryLogger.shared.log("路径碰撞：轨迹穿越他人领地边界", type: .error)
+                        return CollisionResult(
+                            hasCollision: true,
+                            collisionType: .pathCrossTerritory,
+                            message: "轨迹不能穿越他人领地！",
+                            closestDistance: 0,
+                            warningLevel: .violation
+                        )
+                    }
+                }
+
+                // 检查路径点是否在领地内
+                if isPointInPolygon(point: pathEnd, polygon: polygon) {
+                    TerritoryLogger.shared.log("路径碰撞：轨迹点进入他人领地", type: .error)
+                    return CollisionResult(
+                        hasCollision: true,
+                        collisionType: .pointInTerritory,
+                        message: "轨迹不能进入他人领地！",
+                        closestDistance: 0,
+                        warningLevel: .violation
+                    )
+                }
+            }
+        }
+
+        return .safe
+    }
+
+    /// 计算当前位置到他人领地的最近距离
+    func calculateMinDistanceToTerritories(location: CLLocationCoordinate2D, currentUserId: String) -> Double {
+        let otherTerritories = territories.filter { territory in
+            territory.userId.lowercased() != currentUserId.lowercased()
+        }
+
+        guard !otherTerritories.isEmpty else { return Double.infinity }
+
+        var minDistance = Double.infinity
+        let currentLocation = CLLocation(latitude: location.latitude, longitude: location.longitude)
+
+        for territory in otherTerritories {
+            let polygon = territory.toCoordinates()
+
+            for vertex in polygon {
+                let vertexLocation = CLLocation(latitude: vertex.latitude, longitude: vertex.longitude)
+                let distance = currentLocation.distance(from: vertexLocation)
+                minDistance = min(minDistance, distance)
+            }
+        }
+
+        return minDistance
+    }
+
+    /// 综合碰撞检测（主方法）
+    func checkPathCollisionComprehensive(path: [CLLocationCoordinate2D], currentUserId: String) -> CollisionResult {
+        guard path.count >= 2 else { return .safe }
+
+        // 1. 检查路径是否穿越他人领地
+        let crossResult = checkPathCrossTerritory(path: path, currentUserId: currentUserId)
+        if crossResult.hasCollision {
+            return crossResult
+        }
+
+        // 2. 计算到最近领地的距离
+        guard let lastPoint = path.last else { return .safe }
+        let minDistance = calculateMinDistanceToTerritories(location: lastPoint, currentUserId: currentUserId)
+
+        // 3. 根据距离确定预警级别和消息
+        let warningLevel: WarningLevel
+        let message: String?
+
+        if minDistance > 100 {
+            warningLevel = .safe
+            message = nil
+        } else if minDistance > 50 {
+            warningLevel = .caution
+            message = "注意：距离他人领地 \(Int(minDistance))m"
+        } else if minDistance > 25 {
+            warningLevel = .warning
+            message = "警告：正在靠近他人领地（\(Int(minDistance))m）"
+        } else {
+            warningLevel = .danger
+            message = "危险：即将进入他人领地！（\(Int(minDistance))m）"
+        }
+
+        if warningLevel != .safe {
+            TerritoryLogger.shared.log("距离预警：\(warningLevel.description)，距离 \(Int(minDistance))m", type: .warning)
+        }
+
+        return CollisionResult(
+            hasCollision: false,
+            collisionType: nil,
+            message: message,
+            closestDistance: minDistance,
+            warningLevel: warningLevel
+        )
     }
 }
