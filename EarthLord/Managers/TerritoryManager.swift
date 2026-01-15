@@ -109,7 +109,10 @@ class TerritoryManager: ObservableObject {
 
         do {
             // 第一次尝试：直接获取 session（会自动刷新 access token）
-            let session = try await supabase.auth.session
+            // 添加 8 秒超时
+            let session = try await withTimeout(seconds: 8) {
+                try await supabase.auth.session
+            }
             let userId = session.user.id
 
             print("✅ [TerritoryManager] Session 有效")
@@ -119,11 +122,22 @@ class TerritoryManager: ObservableObject {
             return userId
 
         } catch {
-            print("⚠️  [TerritoryManager] 第一次获取 session 失败，尝试显式刷新...")
+            print("⚠️  [TerritoryManager] 第一次获取 session 失败: \(error.localizedDescription)")
 
-            // 第二次尝试：显式刷新 session
+            // 如果是超时错误，直接抛出，不再尝试刷新
+            if (error as NSError).domain == "TimeoutError" {
+                throw NSError(
+                    domain: "TerritoryManager",
+                    code: -1001,
+                    userInfo: [NSLocalizedDescriptionKey: "网络连接超时，请检查网络后重试"]
+                )
+            }
+
+            // 第二次尝试：显式刷新 session（5秒超时）
             do {
-                let refreshedSession = try await supabase.auth.refreshSession()
+                let refreshedSession = try await withTimeout(seconds: 5) {
+                    try await supabase.auth.refreshSession()
+                }
                 let userId = refreshedSession.user.id
 
                 print("✅ [TerritoryManager] Session 刷新成功")
@@ -144,6 +158,28 @@ class TerritoryManager: ObservableObject {
                     userInfo: [NSLocalizedDescriptionKey: "登录已过期，请退出后重新登录"]
                 )
             }
+        }
+    }
+
+    // MARK: - Timeout Utility
+
+    /// 为异步操作添加超时支持
+    private func withTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw NSError(
+                    domain: "TimeoutError",
+                    code: -1001,
+                    userInfo: [NSLocalizedDescriptionKey: "操作超时（\(Int(seconds))秒）"]
+                )
+            }
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
         }
     }
 
@@ -207,15 +243,12 @@ class TerritoryManager: ObservableObject {
         print("   - area: \(area)")
         print("   - bbox: (\(bbox.minLat), \(bbox.maxLat), \(bbox.minLon), \(bbox.maxLon))")
 
-        // 5. 上传到 Supabase
+        // 5. 上传到 Supabase（优化：移除 select 减少往返时间）
         do {
-            let _: TerritoryData = try await supabase
+            try await supabase
                 .from("territories")
                 .insert(uploadData)
-                .select()
-                .single()
                 .execute()
-                .value
 
             print("✅ [TerritoryManager] 领地上传成功")
             TerritoryLogger.shared.log("领地上传成功！面积: \(Int(area))m²", type: .success)
@@ -226,11 +259,87 @@ class TerritoryManager: ObservableObject {
         }
     }
 
-    /// 加载所有活跃的领地
+    /// 加载可见范围内的领地（PostGIS 优化版 - 边界框版本）
+    /// - Parameters:
+    ///   - minLat: 最小纬度
+    ///   - minLng: 最小经度
+    ///   - maxLat: 最大纬度
+    ///   - maxLng: 最大经度
+    ///   - zoomLevel: 地图缩放级别（用于控制坐标简化）
+    /// - Returns: 简化后的领地数组
+    /// - Throws: 加载错误
+    func loadVisibleTerritories(
+        minLat: Double,
+        minLng: Double,
+        maxLat: Double,
+        maxLng: Double,
+        zoomLevel: Double = 15.0
+    ) async throws -> [TerritoryData] {
+        print("📥 [TerritoryManager] 开始加载可见领地（PostGIS优化）")
+        print("   - 边界框: (\(minLat), \(minLng)) → (\(maxLat), \(maxLng))")
+        print("   - 缩放级别: \(zoomLevel)")
+
+        do {
+            // 调用 PostGIS 函数获取简化的领地数据
+            let loadedTerritories: [TerritoryData] = try await supabase
+                .rpc("get_visible_territories", params: [
+                    "min_lat": minLat,
+                    "min_lng": minLng,
+                    "max_lat": maxLat,
+                    "max_lng": maxLng,
+                    "zoom_level": zoomLevel
+                ])
+                .execute()
+                .value
+
+            // 更新本地缓存（用于碰撞检测）
+            self.territories = loadedTerritories
+
+            print("✅ [TerritoryManager] 加载成功，共 \(loadedTerritories.count) 个领地")
+            return loadedTerritories
+        } catch {
+            print("❌ [TerritoryManager] 加载领地失败: \(error)")
+            throw error
+        }
+    }
+
+    /// 加载可见范围内的领地（PostGIS 优化版 - 位置+半径版本）
+    /// - Parameters:
+    ///   - userLocation: 用户当前位置
+    ///   - radiusKm: 查询半径（公里），默认5公里
+    ///   - zoomLevel: 地图缩放级别，默认15（用于控制坐标简化）
+    /// - Returns: 简化后的领地数组
+    /// - Throws: 加载错误
+    func loadVisibleTerritories(
+        userLocation: CLLocationCoordinate2D,
+        radiusKm: Double = 5.0,
+        zoomLevel: Double = 15.0
+    ) async throws -> [TerritoryData] {
+        // 计算边界框
+        let latDelta = radiusKm / 111.0  // 1度纬度约111km
+        let lonDelta = radiusKm / (111.0 * cos(userLocation.latitude * .pi / 180))
+
+        let minLat = userLocation.latitude - latDelta
+        let maxLat = userLocation.latitude + latDelta
+        let minLng = userLocation.longitude - lonDelta
+        let maxLng = userLocation.longitude + lonDelta
+
+        // 调用边界框版本
+        return try await loadVisibleTerritories(
+            minLat: minLat,
+            minLng: minLng,
+            maxLat: maxLat,
+            maxLng: maxLng,
+            zoomLevel: zoomLevel
+        )
+    }
+
+    /// 加载所有活跃的领地（旧方法，保留向后兼容）
     /// - Returns: 领地数组
     /// - Throws: 加载错误
+    /// - Warning: 此方法性能较差，建议使用 loadVisibleTerritories
     func loadAllTerritories() async throws -> [TerritoryData] {
-        print("📥 [TerritoryManager] 开始加载领地列表")
+        print("📥 [TerritoryManager] 开始加载领地列表（旧方法）")
 
         do {
             let loadedTerritories: [TerritoryData] = try await supabase

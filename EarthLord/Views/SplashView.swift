@@ -154,25 +154,37 @@ struct SplashView: View {
     // MARK: - 模拟加载
 
     private func simulateLoading() {
-        // 第一步：检查会话
         Task {
-            loadingText = "正在检查登录状态..."
-            await authManager.checkSession()
-        }
+            print("🔵 [SplashView] simulateLoading 开始")
 
-        // 模拟加载过程
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            loadingText = "正在加载资源..."
-        }
+            // 等待 AuthManager 完成会话检查（它在 init 时已经调用了 checkSession）
+            await MainActor.run {
+                loadingText = "正在检查登录状态..."
+            }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            loadingText = "准备就绪"
-        }
+            print("⏰ [SplashView] 等待会话检查完成（1秒）")
+            // 给 AuthManager 的 checkSession 一点时间完成
+            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1秒
+            print("✅ [SplashView] 等待完成")
 
-        // 完成加载，进入主界面
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                isFinished = true
+            // 显示准备就绪
+            await MainActor.run {
+                loadingText = "准备就绪"
+                print("✅ [SplashView] 状态更新：准备就绪")
+            }
+
+            // 短暂的视觉缓冲（0.3秒）
+            print("⏰ [SplashView] 开始 0.3秒 延迟")
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            print("✅ [SplashView] 延迟完成")
+
+            // 完成加载，进入主界面
+            await MainActor.run {
+                print("🎯 [SplashView] 准备设置 isFinished = true")
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    isFinished = true
+                }
+                print("✅ [SplashView] isFinished 已设置为 true")
             }
         }
     }

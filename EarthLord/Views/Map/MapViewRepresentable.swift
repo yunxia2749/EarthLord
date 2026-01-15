@@ -35,6 +35,12 @@ struct MapViewRepresentable: UIViewRepresentable {
     /// 当前用户ID（用于区分自己和他人的领地）
     var currentUserId: String?
 
+    /// Day 20: 当前地图区域（双向绑定）
+    @Binding var currentMapRegion: MKCoordinateRegion?
+
+    /// Day 20: 地图区域变化回调
+    var onRegionChanged: ((MKCoordinateRegion) -> Void)?
+
     // MARK: - UIViewRepresentable
 
     /// 创建MKMapView
@@ -143,9 +149,21 @@ struct MapViewRepresentable: UIViewRepresentable {
             }
         }
 
-        /// 地图区域改变时调用
+        /// Day 20: 地图区域改变时调用（处理拖动、缩放）
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
-            // 可以在这里处理地图拖动、缩放事件
+            let region = mapView.region
+
+            // 更新绑定的地图区域
+            DispatchQueue.main.async {
+                self.parent.currentMapRegion = region
+            }
+
+            // 调用回调函数
+            if let onRegionChanged = parent.onRegionChanged {
+                DispatchQueue.main.async {
+                    onRegionChanged(region)
+                }
+            }
         }
 
         /// 地图加载完成时调用

@@ -211,7 +211,7 @@ struct TerritoryTabView: View {
 
     /// 总面积
     private var totalArea: Double {
-        territories.reduce(0) { $0 + $1.area }
+        territories.reduce(0) { $0 + ($1.area ?? 0) }
     }
 
     /// 总路径点
@@ -274,7 +274,7 @@ struct TerritoryListCard: View {
                         HStack(spacing: 4) {
                             Image(systemName: "map")
                                 .font(.system(size: 12))
-                            Text(formatArea(territory.area))
+                            Text(formatArea(territory.area ?? 0))
                                 .font(.system(size: 13))
                         }
                         .foregroundColor(.white.opacity(0.6))
@@ -395,7 +395,7 @@ struct TerritoryDetailSheetView: View {
                         TerritoryInfoRow(
                             icon: "map.fill",
                             title: "面积",
-                            value: formatArea(territory.area)
+                            value: formatArea(territory.area ?? 0)
                         )
 
                         // 路径点数

@@ -52,6 +52,14 @@ struct MapTabView: View {
     @State private var trackingStartTime: Date?
     @State private var currentUserId: String? // 当前用户ID（用于碰撞检测）
 
+    // MARK: - 探索功能状态
+    @State private var isExploring: Bool = false
+    @State private var showExplorationResult: Bool = false
+
+    // MARK: - Day 20: 地图区域状态
+    @State private var currentMapRegion: MKCoordinateRegion?
+    @State private var lastLoadedRegion: MKCoordinateRegion?
+
     // MARK: - Body
 
     var body: some View {
@@ -65,7 +73,9 @@ struct MapTabView: View {
                     pathUpdateVersion: $locationManager.pathUpdateVersion,
                     isPathClosed: locationManager.isPathClosed,
                     uploadedTerritories: uploadedTerritories,
-                    currentUserId: currentUserId
+                    currentUserId: currentUserId,
+                    currentMapRegion: $currentMapRegion,
+                    onRegionChanged: handleMapRegionChanged
                 )
                 .ignoresSafeArea(.all, edges: [.top, .leading, .trailing])
             } else {
@@ -114,25 +124,16 @@ struct MapTabView: View {
                 .zIndex(1) // 确保在地图之上
             }
 
-            // 右侧按钮组
-            VStack {
-                Spacer()
-                HStack {
+            // 底部按钮栏（不在追踪时显示）
+            if !locationManager.isTracking && locationManager.isAuthorized {
+                VStack {
                     Spacer()
-                    VStack(spacing: 16) {
-                        // 圈地按钮（不在追踪时显示）
-                        if !locationManager.isTracking {
-                            trackingButton
-                        }
-
-                        // 定位按钮
-                        locationButton
-                    }
-                    .padding(.trailing, 16)
-                    .padding(.bottom, locationManager.isTracking ? 100 : 100) // 为停止按钮和Tab Bar留出空间
+                    bottomButtonBar
+                        .padding(.bottom, 16)
+                        .padding(.horizontal, 16)
                 }
+                .zIndex(2) // 确保按钮在最上层
             }
-            .zIndex(2) // 确保按钮在最上层
         }
         .onAppear {
             // 首次打开时请求定位权限
@@ -142,11 +143,8 @@ struct MapTabView: View {
                 locationManager.startUpdatingLocation()
             }
 
-            // 加载已上传的领地
-            loadUploadedTerritories()
-
-            // Day 19: 获取当前用户ID
-            loadCurrentUserId()
+            // Day 20: 使用优化的初始化逻辑
+            initAppData()
         }
         // ⭐ 监听闭环状态，闭环后根据验证结果显示横幅
         .onReceive(locationManager.$isPathClosed) { isClosed in
@@ -274,33 +272,45 @@ struct MapTabView: View {
         .animation(.easeInOut, value: showValidationBanner)
     }
 
-    /// 圈地追踪按钮
-    private var trackingButton: some View {
+    /// 底部按钮栏（三个按钮水平排列）
+    private var bottomButtonBar: some View {
+        HStack(spacing: 12) {
+            // 左侧：开始圈地按钮
+            claimButton
+
+            // 中间：定位按钮
+            locationButton
+
+            // 右侧：探索按钮
+            exploreButton
+        }
+    }
+
+    /// 开始圈地按钮
+    private var claimButton: some View {
         Button(action: {
-            if locationManager.isTracking {
-                // 停止圈地
-                stopCollisionMonitoring()
-                locationManager.stopPathTracking()
+            if locationManager.isAuthorized {
+                startClaimingWithCollisionCheck()
             } else {
-                // Day 19: 开始圈地前检测起始点
-                if locationManager.isAuthorized {
-                    startClaimingWithCollisionCheck()
-                } else {
-                    showPermissionAlert = true
-                }
+                showPermissionAlert = true
             }
         }) {
-            Image(systemName: locationManager.isTracking ? "stop.circle.fill" : "figure.walk.circle.fill")
-                .font(.title2)
-                .foregroundColor(.white)
-                .frame(width: 50, height: 50)
-                .background(
-                    locationManager.isTracking ?
-                    ApocalypseTheme.danger :
-                    ApocalypseTheme.success
-                )
-                .clipShape(Circle())
-                .shadow(color: .black.opacity(0.3), radius: 5, x: 0, y: 2)
+            HStack(spacing: 8) {
+                Image(systemName: "figure.walk.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundColor(.white)
+
+                Text("开始圈地")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(
+                ApocalypseTheme.success
+            )
+            .cornerRadius(12)
+            .shadow(color: .black.opacity(0.2), radius: 5, x: 0, y: 2)
         }
     }
 
@@ -319,16 +329,16 @@ struct MapTabView: View {
             }
         }) {
             Image(systemName: locationManager.isAuthorized ? "location.fill" : "location.slash.fill")
-                .font(.title2)
+                .font(.system(size: 20))
                 .foregroundColor(.white)
-                .frame(width: 50, height: 50)
+                .frame(width: 60, height: 48)
                 .background(
                     locationManager.isAuthorized ?
                     ApocalypseTheme.primary :
                     ApocalypseTheme.danger
                 )
-                .clipShape(Circle())
-                .shadow(color: .black.opacity(0.3), radius: 5, x: 0, y: 2)
+                .cornerRadius(12)
+                .shadow(color: .black.opacity(0.2), radius: 5, x: 0, y: 2)
         }
         .alert("定位权限未开启", isPresented: $showPermissionAlert) {
             Button("前往设置") {
@@ -339,6 +349,40 @@ struct MapTabView: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("《地球新主》需要定位权限来显示您在末日世界中的位置。请在设置中开启定位权限。")
+        }
+    }
+
+    /// 探索按钮
+    private var exploreButton: some View {
+        Button(action: {
+            performExploration()
+        }) {
+            HStack(spacing: 8) {
+                if isExploring {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(0.8)
+                } else {
+                    Image(systemName: "binoculars.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(.white)
+                }
+
+                Text(isExploring ? "探索中..." : "探索")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(
+                isExploring ? Color.gray : ApocalypseTheme.primary
+            )
+            .cornerRadius(12)
+            .shadow(color: .black.opacity(0.2), radius: 5, x: 0, y: 2)
+        }
+        .disabled(isExploring)
+        .sheet(isPresented: $showExplorationResult) {
+            ExplorationResultView(result: MockExplorationData.mockExplorationResult)
         }
     }
 
@@ -519,6 +563,25 @@ struct MapTabView: View {
         }
     }
 
+    // MARK: - Exploration Method
+
+    /// 执行探索操作
+    private func performExploration() {
+        // 设置探索状态
+        isExploring = true
+
+        // 模拟探索过程（1.5秒）
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            // 探索完成，恢复状态
+            isExploring = false
+
+            // 显示探索结果
+            showExplorationResult = true
+
+            print("✅ [MapTabView] 探索完成，显示结果页面")
+        }
+    }
+
     // MARK: - Upload Method
 
     /// 上传当前领地
@@ -566,7 +629,7 @@ struct MapTabView: View {
             locationManager.stopPathTracking()
 
             // ⭐ 重新加载领地列表，在地图上显示新上传的领地
-            loadUploadedTerritories()
+            await loadUploadedTerritories()
 
         } catch {
             print("❌ [MapTabView] 上传失败: \(error.localizedDescription)")
@@ -581,35 +644,170 @@ struct MapTabView: View {
         }
     }
 
-    /// 加载已上传的领地列表
-    private func loadUploadedTerritories() {
+    // MARK: - Day 20: 优化后的初始化逻辑
+
+    /// Day 20: 统一初始化入口（并行加载，不阻塞UI）
+    private func initAppData() {
         Task {
-            do {
-                print("📥 [MapTabView] 开始加载已上传的领地列表")
-                let territories = try await TerritoryManager.shared.loadAllTerritories()
-                await MainActor.run {
-                    uploadedTerritories = territories
-                    print("✅ [MapTabView] 已加载 \(territories.count) 个领地")
+            // 并行执行：同时获取用户ID 和 加载地图数据
+            await withTaskGroup(of: Void.self) { group in
+
+                // 任务1：获取用户ID
+                group.addTask {
+                    await self.loadCurrentUserId()
                 }
-            } catch {
-                print("❌ [MapTabView] 加载领地失败: \(error.localizedDescription)")
+
+                // 任务2：加载地图数据
+                group.addTask {
+                    await self.loadUploadedTerritories()
+                }
             }
         }
     }
 
-    /// Day 19: 加载当前用户ID
-    private func loadCurrentUserId() {
-        Task {
-            do {
-                let session = try await supabase.auth.session
-                await MainActor.run {
-                    currentUserId = session.user.id.uuidString
-                    print("✅ [MapTabView] 获取用户ID: \(currentUserId ?? "未知")")
+    /// Day 20: 优化版 - 加载领地数据（基于地图区域）
+    private func loadUploadedTerritories() async {
+        do {
+            print("📥 [MapTabView] 开始智能加载领地...")
+
+            // 1. 优先使用当前地图区域，否则等待定位
+            let region: MKCoordinateRegion
+            if let currentRegion = currentMapRegion {
+                region = currentRegion
+                print("✅ [MapTabView] 使用当前地图区域")
+            } else {
+                // 等待位置就绪（带重试机制，2秒超时）
+                guard let location = try? await waitForLocation(timeout: 2.0) else {
+                    print("⚠️ [MapTabView] 定位和地图区域都未就绪，暂停加载")
+                    return
                 }
-            } catch {
-                print("❌ [MapTabView] 获取用户ID失败: \(error.localizedDescription)")
+                // 创建默认区域（约 5km 范围）
+                region = MKCoordinateRegion(
+                    center: location.coordinate,
+                    latitudinalMeters: 5000,
+                    longitudinalMeters: 5000
+                )
+                print("✅ [MapTabView] 使用定位创建默认区域")
+            }
+
+            // 2. 计算加载范围（屏幕的 1.5 倍缓冲区）
+            let bufferMultiplier = 1.5
+            let latDelta = region.span.latitudeDelta
+            let lngDelta = region.span.longitudeDelta
+
+            let minLat = region.center.latitude - (latDelta * bufferMultiplier / 2)
+            let maxLat = region.center.latitude + (latDelta * bufferMultiplier / 2)
+            let minLng = region.center.longitude - (lngDelta * bufferMultiplier / 2)
+            let maxLng = region.center.longitude + (lngDelta * bufferMultiplier / 2)
+
+            print("📐 [MapTabView] 加载范围: (\(minLat), \(minLng)) → (\(maxLat), \(maxLng))")
+
+            // 3. 计算缩放级别（用于多边形简化）
+            let zoomLevel = calculateZoomLevel(from: region.span)
+
+            // 4. 调用 PostGIS RPC（8秒超时）
+            let territories = try await withTimeout(seconds: 8) {
+                try await TerritoryManager.shared.loadVisibleTerritories(
+                    minLat: minLat,
+                    minLng: minLng,
+                    maxLat: maxLat,
+                    maxLng: maxLng,
+                    zoomLevel: zoomLevel
+                )
+            }
+
+            // 5. 更新 UI 和缓存
+            await MainActor.run {
+                self.uploadedTerritories = territories
+                self.lastLoadedRegion = region
+                print("✅ [MapTabView] PostGIS 成功加载 \(territories.count) 个领地（缩放级别: \(zoomLevel)）")
+            }
+
+        } catch {
+            print("❌ [MapTabView] 加载失败: \(error.localizedDescription)")
+            // 失败不阻塞页面
+            await MainActor.run {
+                self.uploadedTerritories = []
             }
         }
+    }
+
+    /// Day 20: 处理地图区域变化
+    private func handleMapRegionChanged(_ region: MKCoordinateRegion) {
+        // 检查是否需要重新加载（移动超过50%视野）
+        if shouldReloadTerritories(newRegion: region) {
+            print("🔄 [MapTabView] 地图区域变化显著，触发重新加载")
+            Task {
+                await loadUploadedTerritories()
+            }
+        }
+    }
+
+    /// Day 20: 判断是否需要重新加载
+    private func shouldReloadTerritories(newRegion: MKCoordinateRegion) -> Bool {
+        guard let lastRegion = lastLoadedRegion else {
+            return true // 首次加载
+        }
+
+        // 计算中心点移动距离
+        let latDiff = abs(newRegion.center.latitude - lastRegion.center.latitude)
+        let lngDiff = abs(newRegion.center.longitude - lastRegion.center.longitude)
+
+        // 计算缩放变化
+        let spanChange = abs(newRegion.span.latitudeDelta - lastRegion.span.latitudeDelta) / lastRegion.span.latitudeDelta
+
+        // 如果移动超过上次加载区域的 50%，或缩放变化超过 30%，则重新加载
+        let moveThreshold = lastRegion.span.latitudeDelta * 0.5
+        let needsReload = latDiff > moveThreshold || lngDiff > moveThreshold || spanChange > 0.3
+
+        return needsReload
+    }
+
+    /// Day 20: 计算缩放级别（用于多边形简化）
+    private func calculateZoomLevel(from span: MKCoordinateSpan) -> Double {
+        // 根据 latitudeDelta 估算缩放级别
+        // latitudeDelta 越小，缩放级别越高（更详细）
+        let zoom = log2(360.0 / span.latitudeDelta)
+        return max(1.0, min(20.0, zoom)) // 限制在 1-20 之间
+    }
+
+    /// Day 20: 优化版 - 获取用户ID
+    private func loadCurrentUserId() async {
+        do {
+            // 5秒超时
+            let session = try await withTimeout(seconds: 5) {
+                try await supabase.auth.session
+            }
+
+            await MainActor.run {
+                self.currentUserId = session.user.id.uuidString
+                print("✅ [MapTabView] 用户ID已就绪: \(self.currentUserId ?? "未知")")
+            }
+        } catch {
+            print("❌ [MapTabView] 用户未登录或网络错误: \(error.localizedDescription)")
+            await MainActor.run {
+                self.currentUserId = nil
+            }
+        }
+    }
+
+    /// Day 20: 辅助方法 - 等待定位就绪（轮询）
+    private func waitForLocation(timeout: TimeInterval) async throws -> CLLocation {
+        let start = Date()
+        while Date().timeIntervalSince(start) < timeout {
+            if let coordinate = locationManager.userLocation {
+                let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+                print("✅ [MapTabView] 定位就绪: (\(coordinate.latitude), \(coordinate.longitude))")
+                return location
+            }
+            // 等待 200ms 后重试
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+        throw NSError(
+            domain: "LocationError",
+            code: 408,
+            userInfo: [NSLocalizedDescriptionKey: "定位超时"]
+        )
     }
 
     // MARK: - Day 19: 碰撞检测方法
@@ -841,6 +1039,41 @@ struct MapTabView: View {
         .animation(.easeInOut(duration: 0.3), value: showCollisionWarning)
     }
 
+}
+
+// MARK: - Timeout Utility
+
+/// 为异步操作添加超时支持
+/// - Parameters:
+///   - seconds: 超时秒数
+///   - operation: 需要执行的异步操作
+/// - Returns: 操作结果
+/// - Throws: 超时错误或操作本身的错误
+func withTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
+    try await withThrowingTaskGroup(of: T.self) { group in
+        // 添加实际操作任务
+        group.addTask {
+            try await operation()
+        }
+
+        // 添加超时任务
+        group.addTask {
+            try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            throw NSError(
+                domain: "TimeoutError",
+                code: -1001,
+                userInfo: [NSLocalizedDescriptionKey: "操作超时（\(Int(seconds))秒）"]
+            )
+        }
+
+        // 返回第一个完成的任务结果
+        let result = try await group.next()!
+
+        // 取消其他任务
+        group.cancelAll()
+
+        return result
+    }
 }
 
 // MARK: - Preview
