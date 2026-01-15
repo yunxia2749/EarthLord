@@ -53,8 +53,10 @@ struct MapTabView: View {
     @State private var currentUserId: String? // 当前用户ID（用于碰撞检测）
 
     // MARK: - 探索功能状态
-    @State private var isExploring: Bool = false
+    @StateObject private var explorationManager = ExplorationManager.shared
     @State private var showExplorationResult: Bool = false
+    @State private var explorationResult: ExplorationResult?
+    @State private var showExplorationFailure: Bool = false
 
     // MARK: - Day 20: 地图区域状态
     @State private var currentMapRegion: MKCoordinateRegion?
@@ -354,36 +356,111 @@ struct MapTabView: View {
 
     /// 探索按钮
     private var exploreButton: some View {
-        Button(action: {
-            performExploration()
-        }) {
-            HStack(spacing: 8) {
-                if isExploring {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .scaleEffect(0.8)
-                } else {
-                    Image(systemName: "binoculars.fill")
-                        .font(.system(size: 18))
-                        .foregroundColor(.white)
-                }
+        VStack(spacing: 12) {
+            // 速度警告（如果有）
+            if let warning = explorationManager.speedWarning, explorationManager.speedWarningCountdown > 0 {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(ApocalypseTheme.danger)
 
-                Text(isExploring ? "探索中..." : "探索")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.white)
+                    Text("速度过快，还有\(explorationManager.speedWarningCountdown)秒")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(ApocalypseTheme.danger)
+
+                    Spacer()
+
+                    Text("\(String(format: "%.0f", explorationManager.currentSpeed))km/h")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(ApocalypseTheme.danger)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(ApocalypseTheme.danger.opacity(0.1))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(ApocalypseTheme.danger, lineWidth: 1)
+                )
+                .transition(.opacity)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(
-                isExploring ? Color.gray : ApocalypseTheme.primary
-            )
-            .cornerRadius(12)
-            .shadow(color: .black.opacity(0.2), radius: 5, x: 0, y: 2)
+
+            // 探索按钮
+            Button(action: {
+                performExploration()
+            }) {
+                HStack(spacing: 8) {
+                    if explorationManager.isExploring {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: "binoculars.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(.white)
+                    }
+
+                    if explorationManager.isExploring {
+                        VStack(spacing: 2) {
+                            Text("探索中...")
+                                .font(.system(size: 15, weight: .semibold))
+
+                            HStack(spacing: 12) {
+                                Text("\(String(format: "%.0f", explorationManager.totalDistance))米")
+                                    .font(.system(size: 12))
+
+                                Text(formatDuration(explorationManager.currentDuration))
+                                    .font(.system(size: 12))
+                            }
+                        }
+                        .foregroundColor(.white)
+                    } else {
+                        Text("探索")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(
+                    explorationManager.isExploring ?
+                    LinearGradient(
+                        colors: [ApocalypseTheme.success, ApocalypseTheme.success.opacity(0.8)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ) :
+                    LinearGradient(
+                        colors: [ApocalypseTheme.primary, ApocalypseTheme.primaryDark],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .cornerRadius(12)
+                .shadow(color: .black.opacity(0.2), radius: 5, x: 0, y: 2)
+            }
         }
-        .disabled(isExploring)
+        .animation(.easeInOut(duration: 0.3), value: explorationManager.speedWarning)
         .sheet(isPresented: $showExplorationResult) {
-            ExplorationResultView(result: MockExplorationData.mockExplorationResult)
+            if let result = explorationResult {
+                ExplorationResultView(result: result)
+            }
         }
+        .alert("探索失败", isPresented: $showExplorationFailure) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            if let reason = explorationManager.failureReason {
+                Text(reason)
+            }
+        }
+    }
+
+    /// 格式化时长
+    private func formatDuration(_ seconds: TimeInterval) -> String {
+        let mins = Int(seconds) / 60
+        let secs = Int(seconds) % 60
+        return String(format: "%d:%02d", mins, secs)
     }
 
     /// 停止圈地按钮（老师样式）
@@ -567,18 +644,39 @@ struct MapTabView: View {
 
     /// 执行探索操作
     private func performExploration() {
-        // 设置探索状态
-        isExploring = true
+        if explorationManager.isExploring {
+            // 停止探索
+            print("🔵 [MapTabView] 用户点击停止探索")
+            Task {
+                let result = await explorationManager.stopExploration()
+                explorationResult = result
+                showExplorationResult = true
+                print("✅ [MapTabView] 探索结束，显示结果页面")
+            }
+        } else {
+            // 开始探索
+            print("🔵 [MapTabView] 用户点击开始探索")
+            Task {
+                await explorationManager.startExploration()
+                print("✅ [MapTabView] 探索已启动")
+            }
+        }
 
-        // 模拟探索过程（1.5秒）
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            // 探索完成，恢复状态
-            isExploring = false
+        // 监听失败状态
+        Task {
+            // 等待一点时间让Manager初始化
+            try? await Task.sleep(nanoseconds: 500_000_000)
 
-            // 显示探索结果
-            showExplorationResult = true
+            // 定期检查失败状态
+            while explorationManager.isExploring {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)  // 每秒检查一次
 
-            print("✅ [MapTabView] 探索完成，显示结果页面")
+                if explorationManager.explorationFailed {
+                    showExplorationFailure = true
+                    print("❌ [MapTabView] 探索失败: \(explorationManager.failureReason ?? "未知原因")")
+                    break
+                }
+            }
         }
     }
 

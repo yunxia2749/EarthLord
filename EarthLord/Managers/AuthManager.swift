@@ -328,12 +328,20 @@ class AuthManager: ObservableObject {
             print("📝 [认证] 用户ID: \(session.user.id)")
             print("📝 [认证] 邮箱: \(session.user.email ?? "未知")")
 
-            // 5. 确保 profile 记录存在（重要！）
-            print("🔍 [认证] 检查并创建 profile 记录...")
-            try await ensureProfileExists(userId: session.user.id)
-
+            // 先设置认证状态，确保用户能进入应用
             isAuthenticated = true
             needsPasswordSetup = false
+
+            // 5. 确保 profile 记录存在（在后台执行，不阻断登录流程）
+            let userId = session.user.id
+            Task {
+                do {
+                    print("🔍 [认证] 检查并创建 profile 记录...")
+                    try await ensureProfileExists(userId: userId)
+                } catch {
+                    print("⚠️ [认证] Profile 创建失败，但不影响登录: \(error)")
+                }
+            }
 
         } catch {
             // 登录失败
@@ -516,8 +524,10 @@ class AuthManager: ObservableObject {
         isLoading = true
 
         do {
-            // 获取当前会话
-            let session = try await supabase.auth.session
+            // 使用超时保护获取当前会话（最多等待 10 秒）
+            let session = try await withTimeout(seconds: 10) {
+                try await supabase.auth.session
+            }
 
             // 会话存在
             currentUser = session.user
@@ -526,38 +536,80 @@ class AuthManager: ObservableObject {
             print("用户 ID: \(session.user.id)")
             print("邮箱: \(session.user.email ?? "未知")")
 
-            // ⭐ 确保 profile 记录存在（非常重要！）
-            print("🔍 [会话恢复] 检查并创建 profile 记录...")
-            try await ensureProfileExists(userId: session.user.id)
-
-            // 检查用户是否已设置密码
-            // 注意：这里假设如果能获取到会话，用户就已经完成了所有必要的设置
-            // 如果需要更精确的判断，可以在用户元数据中存储标志位
+            // 先设置认证状态，确保用户能进入应用
             isAuthenticated = true
             needsPasswordSetup = false
 
+            // ⭐ 确保 profile 记录存在（在后台执行，不阻断登录流程）
+            Task {
+                do {
+                    print("🔍 [会话恢复] 检查并创建 profile 记录...")
+                    try await ensureProfileExists(userId: session.user.id)
+                } catch {
+                    print("⚠️ [会话恢复] Profile 检查失败，但不影响登录: \(error)")
+                }
+            }
+
         } catch {
-            // 没有有效会话
+            // 没有有效会话或超时
             currentUser = nil
             isAuthenticated = false
             needsPasswordSetup = false
 
-            print("ℹ️ 没有活动会话")
+            if error is TimeoutError {
+                print("⚠️ 会话检查超时，请检查网络连接")
+            } else {
+                print("ℹ️ 没有活动会话: \(error)")
+            }
         }
 
         isLoading = false
     }
 
+    /// 超时错误
+    struct TimeoutError: Error {
+        let message: String
+    }
+
+    /// 带超时的异步操作包装器
+    private func withTimeout<T>(seconds: Double, operation: @escaping () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw TimeoutError(message: "操作超时")
+            }
+
+            // 返回第一个完成的结果
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
+    }
+
     /// 启动会话状态监听
     /// 监听 auth state 变化，处理会话过期等情况
     private func startAuthStateListener() async {
+        print("🔔 [Auth] 开始监听认证状态变化...")
         // 监听 auth state 变化
         authStateTask = Task {
-            for await state in supabase.auth.authStateChanges {
-                // 确保在主线程更新 UI
-                await MainActor.run {
-                    handleAuthStateChange(state.event, session: state.session)
+            do {
+                for await state in supabase.auth.authStateChanges {
+                    // 忽略 initialSession 事件（避免 Supabase SDK 的已知问题）
+                    if state.event == .initialSession {
+                        print("ℹ️ [Auth] 收到 initialSession 事件，跳过处理")
+                        continue
+                    }
+                    // 确保在主线程更新 UI
+                    await MainActor.run {
+                        handleAuthStateChange(state.event, session: state.session)
+                    }
                 }
+            } catch {
+                print("❌ [Auth] 监听器错误: \(error)")
             }
         }
     }
