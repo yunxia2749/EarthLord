@@ -2,16 +2,17 @@
 //  ExplorationManager.swift
 //  EarthLord
 //
-//  探索管理器：GPS追踪、距离计算、速度限制（30km/h + 10秒倒计时）
+//  探索管理器：GPS追踪、距离计算、速度限制、POI搜刮系统
 //
 
 import Foundation
 import CoreLocation
 import Combine
 import Supabase
+import MapKit
 
 /// 探索管理器
-/// 负责探索流程控制、GPS追踪、速度监控、奖励生成
+/// 负责探索流程控制、GPS追踪、速度监控、POI管理、奖励生成
 @MainActor
 class ExplorationManager: NSObject, ObservableObject {
 
@@ -45,10 +46,36 @@ class ExplorationManager: NSObject, ObservableObject {
     /// 当前速度（km/h）
     @Published var currentSpeed: Double = 0
 
+    // MARK: - POI 相关属性
+
+    /// 当前探索中的POI列表
+    @Published var nearbyPOIs: [POIData] = []
+
+    /// 是否正在搜索POI
+    @Published var isSearchingPOIs: Bool = false
+
+    /// 当前接近的POI（触发弹窗）
+    @Published var currentProximityPOI: POIData?
+
+    /// 是否显示POI接近弹窗
+    @Published var showPOIProximityPopup: Bool = false
+
+    /// 是否显示搜刮结果
+    @Published var showScavengeResult: Bool = false
+
+    /// 搜刮获得的物品
+    @Published var scavengeRewards: [RewardItem] = []
+
+    /// 已搜刮的POI ID集合
+    @Published var scavengedPOIIds: Set<String> = []
+
     // MARK: - Private Properties
 
     /// LocationManager引用
     private let locationManager = LocationManager()
+
+    /// 地理围栏管理器（用于POI接近检测）
+    private let geofenceManager = CLLocationManager()
 
     /// 探索开始时间
     private var explorationStartTime: Date?
@@ -68,14 +95,17 @@ class ExplorationManager: NSObject, ObservableObject {
     /// 记录的位置点数（用于GPS预热）
     private var recordedPointsCount: Int = 0
 
-    /// GPS预热点数（前3个点不检测速度）
-    private let gpsWarmupPoints: Int = 3
+    /// GPS预热点数（前5个点不检测速度，让GPS稳定）
+    private let gpsWarmupPoints: Int = 5
 
     /// 速度限制（km/h）
     private let speedLimit: Double = 30.0
 
     /// 超速倒计时时长（秒）
     private let speedWarningDuration: Int = 10
+
+    /// POI触发距离（米）
+    private let poiTriggerRadius: CLLocationDistance = 50.0
 
     // 注意：使用全局的 supabase 实例（定义在 SupabaseTestView.swift）
     // 确保与 AuthManager 使用相同的认证会话
@@ -91,6 +121,7 @@ class ExplorationManager: NSObject, ObservableObject {
     private override init() {
         super.init()
         setupLocationObserver()
+        setupGeofenceManager()
     }
 
     // MARK: - Setup
@@ -107,6 +138,13 @@ class ExplorationManager: NSObject, ObservableObject {
                 }
             }
             .store(in: &cancellables)
+    }
+
+    /// 设置地理围栏管理器
+    private func setupGeofenceManager() {
+        geofenceManager.delegate = self
+        geofenceManager.desiredAccuracy = kCLLocationAccuracyBest
+        geofenceManager.allowsBackgroundLocationUpdates = false
     }
 
     // MARK: - Public Methods
@@ -129,6 +167,14 @@ class ExplorationManager: NSObject, ObservableObject {
         recordedPointsCount = 0
         explorationStartTime = Date()
 
+        // 重置POI状态
+        nearbyPOIs = []
+        scavengedPOIIds = []
+        currentProximityPOI = nil
+        showPOIProximityPopup = false
+        showScavengeResult = false
+        scavengeRewards = []
+
         // 启动计时器
         durationTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -141,6 +187,9 @@ class ExplorationManager: NSObject, ObservableObject {
 
         // 创建探索会话记录
         await createExplorationSession()
+
+        // 搜索附近POI
+        await searchAndSetupPOIs()
 
         log("计时器已启动", type: .info)
         log("GPS追踪已开始", type: .info)
@@ -224,6 +273,9 @@ class ExplorationManager: NSObject, ObservableObject {
             rewardsErrorMessage: rewardsErrorMessage
         )
 
+        // 清除POI数据和围栏
+        clearPOIs()
+
         // 重置状态
         isExploring = false
 
@@ -236,6 +288,9 @@ class ExplorationManager: NSObject, ObservableObject {
     func stopExplorationWithFailure(reason: String) async {
         log("========== 探索失败 ==========", type: .error)
         log("失败原因: \(reason)", type: .error)
+
+        // 清除POI数据和围栏
+        clearPOIs()
 
         explorationFailed = true
         failureReason = reason
@@ -266,6 +321,9 @@ class ExplorationManager: NSObject, ObservableObject {
     /// 处理位置更新
     private func handleLocationUpdate(coordinate: CLLocationCoordinate2D) async {
         let currentLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+
+        // ⭐ 主动检测POI接近（每次位置更新都检查）
+        checkPOIProximity(userLocation: currentLocation)
 
         // 第一个位置点
         if lastRecordedLocation == nil {
@@ -319,26 +377,27 @@ class ExplorationManager: NSObject, ObservableObject {
     ///   - accuracy: GPS精度（米）
     /// - Returns: true表示速度有效，false表示速度无效
     private func validateMovementSpeed(speed: Double, accuracy: Double) async -> Bool {
-        // GPS预热期（前3个点）不检测速度
+        // GPS预热期（前5个点）不检测速度
         if recordedPointsCount < gpsWarmupPoints {
             log("GPS预热中，跳过速度检测（\(recordedPointsCount)/\(gpsWarmupPoints)）", type: .info)
             return true
         }
 
-        // 检查GPS精度
-        if accuracy < 0 || accuracy > 65 {
-            log("GPS精度太差 (\(String(format: "%.1f", accuracy))米)，忽略本次更新", type: .warning)
+        // 检查GPS精度（精度差时忽略速度检测）
+        if accuracy < 0 || accuracy > 30 {
+            log("GPS精度较差 (\(String(format: "%.1f", accuracy))米)，忽略速度检测", type: .warning)
+            // 精度差时仍然记录距离，但不检测速度
+            return true
+        }
+
+        // 过滤GPS跳变（> 50 km/h 视为GPS漂移）
+        if speed > 50 {
+            log("检测到GPS跳变/漂移 (\(String(format: "%.1f", speed)) km/h)，忽略本次更新", type: .warning)
             return false
         }
 
-        // 过滤GPS跳变（> 100 km/h）
-        if speed > 100 {
-            log("检测到GPS跳变 (\(String(format: "%.1f", speed)) km/h)，忽略本次更新", type: .warning)
-            return false
-        }
-
-        // 检测超速（> 30 km/h）
-        if speed > speedLimit {
+        // 检测超速（> 30 km/h 且精度良好时才警告）
+        if speed > speedLimit && accuracy <= 20 {
             log("速度检测: \(String(format: "%.1f", speed)) km/h，超过限制(\(speedLimit) km/h)", type: .warning)
 
             if speedWarningTimer == nil {
@@ -579,6 +638,269 @@ class ExplorationManager: NSObject, ObservableObject {
             case .error: return "❌"
             case .success: return "✅"
             }
+        }
+    }
+
+    // MARK: - POI 搜索与管理
+
+    /// 搜索附近POI并设置地理围栏
+    private func searchAndSetupPOIs() async {
+        guard let userLocation = locationManager.userLocation else {
+            log("无法获取用户位置，跳过POI搜索", type: .warning)
+            return
+        }
+
+        isSearchingPOIs = true
+        log("========== 开始搜索附近POI ==========", type: .info)
+
+        // 搜索POI
+        var pois = await POISearchManager.shared.searchNearbyPOIs(center: userLocation)
+
+        // ⭐ 添加虚拟测试POI（在用户位置附近20米处）
+        let testPOI = createTestPOI(near: userLocation)
+        pois.insert(testPOI, at: 0)  // 放在列表最前面
+        log("✅ 已添加测试超市POI: \(testPOI.name)", type: .success)
+
+        nearbyPOIs = pois
+
+        log("找到 \(pois.count) 个POI（含1个测试点）", type: .success)
+
+        // 为每个POI创建地理围栏
+        setupGeofences(for: pois)
+
+        isSearchingPOIs = false
+        log("========== POI搜索完成 ==========", type: .success)
+    }
+
+    /// 创建测试用虚拟POI（在用户当前位置，立即可触发）
+    private func createTestPOI(near userLocation: CLLocationCoordinate2D) -> POIData {
+        // ⭐ 直接放在用户当前位置（偏移约5米，确保立即触发）
+        // 1度纬度约111公里，5米 ≈ 0.000045度
+        let offsetLat = 0.00004  // 约4米北
+        let offsetLng = 0.00004  // 约4米东
+
+        let testCoordinate = CLLocationCoordinate2D(
+            latitude: userLocation.latitude + offsetLat,
+            longitude: userLocation.longitude + offsetLng
+        )
+
+        return POIData(
+            id: "test_supermarket_\(UUID().uuidString.prefix(8))",
+            name: "🧪 测试超市",
+            type: .supermarket,
+            coordinate: testCoordinate,
+            discoveryStatus: .discovered,
+            searchStatus: .hasLoot,
+            dangerLevel: 1,
+            description: "这是一个用于测试的虚拟超市，里面有丰富的物资等你来搜刮！"
+        )
+    }
+
+    /// 为POI列表创建地理围栏
+    private func setupGeofences(for pois: [POIData]) {
+        log("开始创建地理围栏...", type: .info)
+
+        // 先清除所有现有围栏
+        clearAllGeofences()
+
+        // 为每个POI创建围栏（最多20个）
+        for poi in pois.prefix(20) {
+            let region = CLCircularRegion(
+                center: poi.coordinate,
+                radius: poiTriggerRadius,
+                identifier: poi.id
+            )
+            region.notifyOnEntry = true
+            region.notifyOnExit = false
+
+            geofenceManager.startMonitoring(for: region)
+            log("围栏已创建: \(poi.name) (ID: \(poi.id))", type: .info)
+        }
+
+        log("共创建 \(min(pois.count, 20)) 个地理围栏", type: .success)
+    }
+
+    /// 清除所有地理围栏
+    private func clearAllGeofences() {
+        for region in geofenceManager.monitoredRegions {
+            geofenceManager.stopMonitoring(for: region)
+        }
+        log("已清除所有地理围栏", type: .info)
+    }
+
+    /// 清除POI数据（停止探索时调用）
+    func clearPOIs() {
+        clearAllGeofences()
+        nearbyPOIs = []
+        scavengedPOIIds = []
+        currentProximityPOI = nil
+        showPOIProximityPopup = false
+        showScavengeResult = false
+        scavengeRewards = []
+        log("POI数据已清除", type: .info)
+    }
+
+    /// ⭐ 主动检测用户是否接近任何POI
+    /// 每次位置更新时调用，补充地理围栏的不足
+    private func checkPOIProximity(userLocation: CLLocation) {
+        // 如果已有弹窗显示，跳过检测
+        guard !showPOIProximityPopup && !showScavengeResult else { return }
+
+        // 遍历所有POI，检查距离
+        for poi in nearbyPOIs {
+            // 跳过已搜刮的POI
+            if scavengedPOIIds.contains(poi.id) { continue }
+
+            let poiLocation = CLLocation(latitude: poi.coordinate.latitude, longitude: poi.coordinate.longitude)
+            let distance = userLocation.distance(from: poiLocation)
+
+            // 如果在触发距离内（50米），显示弹窗
+            if distance <= poiTriggerRadius {
+                log("⭐ 主动检测到接近POI: \(poi.name)，距离: \(String(format: "%.1f", distance))米", type: .success)
+                currentProximityPOI = poi
+                showPOIProximityPopup = true
+                return  // 一次只显示一个弹窗
+            }
+        }
+    }
+
+    // MARK: - POI 搜刮
+
+    /// 执行POI搜刮
+    /// - Parameter poi: 要搜刮的POI
+    func scavengePOI(_ poi: POIData) async {
+        log("========== 开始搜刮POI ==========", type: .info)
+        log("POI: \(poi.name) (类型: \(poi.type.displayName))", type: .info)
+
+        // 标记为已搜刮
+        scavengedPOIIds.insert(poi.id)
+
+        // 生成搜刮物品（复用RewardGenerator的物品池）
+        let rewards = generateScavengeRewards(for: poi)
+        scavengeRewards = rewards
+
+        log("生成 \(rewards.count) 个物品:", type: .success)
+        for reward in rewards {
+            log("  - \(reward.itemId) x\(reward.quantity)", type: .info)
+        }
+
+        // 添加到背包
+        do {
+            try await InventoryManager.shared.addItems(rewards)
+            log("物品已添加到背包", type: .success)
+        } catch {
+            log("添加物品到背包失败: \(error.localizedDescription)", type: .error)
+        }
+
+        // 关闭接近弹窗，显示结果
+        showPOIProximityPopup = false
+        showScavengeResult = true
+
+        log("========== 搜刮完成 ==========", type: .success)
+    }
+
+    /// 生成搜刮奖励
+    private func generateScavengeRewards(for poi: POIData) -> [RewardItem] {
+        // 随机生成1-3个物品
+        let itemCount = Int.random(in: 1...3)
+        var rewards: [RewardItem] = []
+
+        // 根据POI类型使用不同的物品池（Day22简化版：使用通用池）
+        let itemPool = getItemPool(for: poi.type)
+
+        for _ in 0..<itemCount {
+            if let itemId = itemPool.randomElement() {
+                let quantity = Int.random(in: 1...2)
+                rewards.append(RewardItem(itemId: itemId, quantity: quantity))
+            }
+        }
+
+        return rewards
+    }
+
+    /// 获取POI类型对应的物品池
+    private func getItemPool(for poiType: POIType) -> [String] {
+        // Day22简化版：所有类型使用相同的通用物品池
+        // 后续可以根据类型返回不同物品池
+        switch poiType {
+        case .supermarket:
+            return ["item_water_bottle", "item_canned_food", "item_bandage"]
+        case .hospital, .pharmacy:
+            return ["item_medicine", "item_bandage", "item_first_aid_kit"]
+        case .gasStation:
+            return ["item_flashlight", "item_rope", "item_scrap_metal"]
+        default:
+            return ["item_water_bottle", "item_canned_food", "item_bandage", "item_wood", "item_rope"]
+        }
+    }
+
+    /// 关闭搜刮结果弹窗
+    func dismissScavengeResult() {
+        showScavengeResult = false
+        scavengeRewards = []
+        currentProximityPOI = nil
+    }
+
+    /// 关闭POI接近弹窗（稍后再说）
+    func dismissPOIPopup() {
+        showPOIProximityPopup = false
+        currentProximityPOI = nil
+    }
+
+    /// 检查POI是否已被搜刮
+    func isPOIScavenged(_ poi: POIData) -> Bool {
+        return scavengedPOIIds.contains(poi.id)
+    }
+}
+
+// MARK: - CLLocationManagerDelegate
+
+extension ExplorationManager: CLLocationManagerDelegate {
+
+    /// 进入地理围栏时调用
+    nonisolated func locationManager(_ manager: CLLocationManager, didEnterRegion region: CLRegion) {
+        guard let circularRegion = region as? CLCircularRegion else { return }
+
+        Task { @MainActor in
+            handleDidEnterRegion(identifier: circularRegion.identifier)
+        }
+    }
+
+    /// 处理进入围栏事件
+    private func handleDidEnterRegion(identifier: String) {
+        log("========== 进入POI范围 ==========", type: .info)
+        log("围栏ID: \(identifier)", type: .info)
+
+        // 查找对应的POI
+        guard let poi = nearbyPOIs.first(where: { $0.id == identifier }) else {
+            log("未找到对应的POI", type: .warning)
+            return
+        }
+
+        // 检查是否已搜刮
+        if scavengedPOIIds.contains(poi.id) {
+            log("POI已被搜刮，跳过弹窗", type: .info)
+            return
+        }
+
+        // 检查是否已有弹窗显示
+        if showPOIProximityPopup || showScavengeResult {
+            log("已有弹窗显示，跳过", type: .info)
+            return
+        }
+
+        // 设置当前POI并显示弹窗
+        currentProximityPOI = poi
+        showPOIProximityPopup = true
+
+        log("显示搜刮提示: \(poi.name)", type: .success)
+        log("========== ==========", type: .info)
+    }
+
+    /// 地理围栏监控失败
+    nonisolated func locationManager(_ manager: CLLocationManager, monitoringDidFailFor region: CLRegion?, withError error: Error) {
+        Task { @MainActor in
+            log("围栏监控失败: \(error.localizedDescription)", type: .error)
         }
     }
 }

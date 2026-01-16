@@ -77,7 +77,9 @@ struct MapTabView: View {
                     uploadedTerritories: uploadedTerritories,
                     currentUserId: currentUserId,
                     currentMapRegion: $currentMapRegion,
-                    onRegionChanged: handleMapRegionChanged
+                    onRegionChanged: handleMapRegionChanged,
+                    nearbyPOIs: explorationManager.nearbyPOIs,
+                    scavengedPOIIds: explorationManager.scavengedPOIIds
                 )
                 .ignoresSafeArea(.all, edges: [.top, .leading, .trailing])
             } else {
@@ -136,7 +138,57 @@ struct MapTabView: View {
                 }
                 .zIndex(2) // 确保按钮在最上层
             }
+
+            // MARK: - POI 弹窗层
+
+            // POI接近弹窗
+            if explorationManager.showPOIProximityPopup, let poi = explorationManager.currentProximityPOI {
+                Color.black.opacity(0.4)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        explorationManager.dismissPOIPopup()
+                    }
+                    .zIndex(10)
+
+                VStack {
+                    Spacer()
+                    POIProximityPopup(
+                        poi: poi,
+                        userLocation: locationManager.userLocation,
+                        onScavenge: {
+                            Task {
+                                await explorationManager.scavengePOI(poi)
+                            }
+                        },
+                        onDismiss: {
+                            explorationManager.dismissPOIPopup()
+                        }
+                    )
+                    .padding(.bottom, 100)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(11)
+            }
+
+            // 搜刮结果弹窗
+            if explorationManager.showScavengeResult, let poi = explorationManager.currentProximityPOI {
+                Color.black.opacity(0.5)
+                    .ignoresSafeArea()
+                    .zIndex(12)
+
+                ScavengeResultView(
+                    poi: poi,
+                    rewards: explorationManager.scavengeRewards,
+                    onConfirm: {
+                        explorationManager.dismissScavengeResult()
+                    }
+                )
+                .transition(.scale.combined(with: .opacity))
+                .zIndex(13)
+            }
         }
+        .animation(.easeInOut(duration: 0.3), value: explorationManager.showPOIProximityPopup)
+        .animation(.easeInOut(duration: 0.3), value: explorationManager.showScavengeResult)
         .onAppear {
             // 首次打开时请求定位权限
             if locationManager.authorizationStatus == .notDetermined {
@@ -288,7 +340,7 @@ struct MapTabView: View {
         }
     }
 
-    /// 开始圈地按钮
+    /// 开始圈地按钮（橙色）
     private var claimButton: some View {
         Button(action: {
             if locationManager.isAuthorized {
@@ -298,7 +350,7 @@ struct MapTabView: View {
             }
         }) {
             HStack(spacing: 8) {
-                Image(systemName: "figure.walk.circle.fill")
+                Image(systemName: "figure.walk")
                     .font(.system(size: 18))
                     .foregroundColor(.white)
 
@@ -309,14 +361,14 @@ struct MapTabView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
             .background(
-                ApocalypseTheme.success
+                Color.orange
             )
-            .cornerRadius(12)
+            .cornerRadius(25)
             .shadow(color: .black.opacity(0.2), radius: 5, x: 0, y: 2)
         }
     }
 
-    /// 定位按钮
+    /// 定位按钮（蓝色圆形）
     private var locationButton: some View {
         Button(action: {
             if locationManager.isAuthorized {
@@ -330,16 +382,14 @@ struct MapTabView: View {
                 locationManager.requestPermission()
             }
         }) {
-            Image(systemName: locationManager.isAuthorized ? "location.fill" : "location.slash.fill")
-                .font(.system(size: 20))
+            Image(systemName: "location.fill")
+                .font(.system(size: 22))
                 .foregroundColor(.white)
-                .frame(width: 60, height: 48)
+                .frame(width: 56, height: 48)
                 .background(
-                    locationManager.isAuthorized ?
-                    ApocalypseTheme.primary :
-                    ApocalypseTheme.danger
+                    Color.orange
                 )
-                .cornerRadius(12)
+                .cornerRadius(24)
                 .shadow(color: .black.opacity(0.2), radius: 5, x: 0, y: 2)
         }
         .alert("定位权限未开启", isPresented: $showPermissionAlert) {
@@ -354,7 +404,7 @@ struct MapTabView: View {
         }
     }
 
-    /// 探索按钮
+    /// 探索按钮（绿色，匹配老师设计）
     private var exploreButton: some View {
         VStack(spacing: 12) {
             // 速度警告（如果有）
@@ -393,31 +443,33 @@ struct MapTabView: View {
             }) {
                 HStack(spacing: 8) {
                     if explorationManager.isExploring {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(0.8)
+                        // 探索中：显示停止图标
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(.white)
                     } else {
-                        Image(systemName: "binoculars.fill")
+                        // 未探索：显示行走图标
+                        Image(systemName: "figure.walk")
                             .font(.system(size: 18))
                             .foregroundColor(.white)
                     }
 
                     if explorationManager.isExploring {
                         VStack(spacing: 2) {
-                            Text("探索中...")
+                            Text("停止探索")
                                 .font(.system(size: 15, weight: .semibold))
 
-                            HStack(spacing: 12) {
+                            HStack(spacing: 8) {
                                 Text("\(String(format: "%.0f", explorationManager.totalDistance))米")
-                                    .font(.system(size: 12))
+                                    .font(.system(size: 11))
 
                                 Text(formatDuration(explorationManager.currentDuration))
-                                    .font(.system(size: 12))
+                                    .font(.system(size: 11))
                             }
                         }
                         .foregroundColor(.white)
                     } else {
-                        Text("探索")
+                        Text("开始探索")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundColor(.white)
                     }
@@ -426,22 +478,15 @@ struct MapTabView: View {
                 .padding(.vertical, 14)
                 .background(
                     explorationManager.isExploring ?
-                    LinearGradient(
-                        colors: [ApocalypseTheme.success, ApocalypseTheme.success.opacity(0.8)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    ) :
-                    LinearGradient(
-                        colors: [ApocalypseTheme.primary, ApocalypseTheme.primaryDark],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
+                    Color.red :  // 探索中显示红色（停止按钮）
+                    Color.green  // 未探索显示绿色
                 )
-                .cornerRadius(12)
+                .cornerRadius(25)
                 .shadow(color: .black.opacity(0.2), radius: 5, x: 0, y: 2)
             }
         }
         .animation(.easeInOut(duration: 0.3), value: explorationManager.speedWarning)
+        .animation(.easeInOut(duration: 0.3), value: explorationManager.isExploring)
         .sheet(isPresented: $showExplorationResult) {
             if let result = explorationResult {
                 ExplorationResultView(result: result)

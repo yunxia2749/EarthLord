@@ -41,6 +41,12 @@ struct MapViewRepresentable: UIViewRepresentable {
     /// Day 20: 地图区域变化回调
     var onRegionChanged: ((MKCoordinateRegion) -> Void)?
 
+    /// Day 22: 附近的POI列表
+    var nearbyPOIs: [POIData] = []
+
+    /// Day 22: 已搜刮的POI ID集合
+    var scavengedPOIIds: Set<String> = []
+
     // MARK: - UIViewRepresentable
 
     /// 创建MKMapView
@@ -76,6 +82,9 @@ struct MapViewRepresentable: UIViewRepresentable {
 
         // ⭐ 绘制已上传的领地
         context.coordinator.updateUploadedTerritories(on: uiView, territories: uploadedTerritories)
+
+        // ⭐ Day 22: 更新POI标记
+        context.coordinator.updatePOIAnnotations(on: uiView, pois: nearbyPOIs, scavengedIds: scavengedPOIIds)
     }
 
     /// 创建协调器
@@ -346,6 +355,120 @@ struct MapViewRepresentable: UIViewRepresentable {
             // 默认渲染器
             return MKOverlayRenderer(overlay: overlay)
         }
+
+        // MARK: - POI Annotations (Day 22)
+
+        /// 已渲染的POI ID集合
+        private var renderedPOIIds: Set<String> = []
+
+        /// 更新POI标记
+        func updatePOIAnnotations(on mapView: MKMapView, pois: [POIData], scavengedIds: Set<String>) {
+            // 当前POI ID集合
+            let currentPOIIds = Set(pois.map { $0.id })
+
+            // 移除不在当前列表中的标记
+            mapView.annotations.forEach { annotation in
+                if let poiAnnotation = annotation as? POIAnnotation,
+                   !currentPOIIds.contains(poiAnnotation.poiId) {
+                    mapView.removeAnnotation(annotation)
+                    renderedPOIIds.remove(poiAnnotation.poiId)
+                }
+            }
+
+            // 添加新POI标记
+            for poi in pois {
+                // 如果已存在，检查是否需要更新搜刮状态
+                if let existingAnnotation = mapView.annotations.compactMap({ $0 as? POIAnnotation }).first(where: { $0.poiId == poi.id }) {
+                    let isScavenged = scavengedIds.contains(poi.id)
+                    if existingAnnotation.isScavenged != isScavenged {
+                        // 状态变化，移除旧标记并重新添加
+                        mapView.removeAnnotation(existingAnnotation)
+                        renderedPOIIds.remove(poi.id)
+                    } else {
+                        continue // 无需更新
+                    }
+                }
+
+                // 跳过已绘制的POI
+                guard !renderedPOIIds.contains(poi.id) else { continue }
+
+                // 创建标记
+                let annotation = POIAnnotation(poi: poi, isScavenged: scavengedIds.contains(poi.id))
+                mapView.addAnnotation(annotation)
+                renderedPOIIds.insert(poi.id)
+            }
+        }
+
+        /// 自定义POI标记视图
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            // 忽略用户位置标记
+            guard !(annotation is MKUserLocation) else { return nil }
+
+            // 处理POI标记
+            if let poiAnnotation = annotation as? POIAnnotation {
+                let identifier = "POIAnnotation"
+                var annotationView = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView
+
+                if annotationView == nil {
+                    annotationView = MKMarkerAnnotationView(annotation: poiAnnotation, reuseIdentifier: identifier)
+                    annotationView?.canShowCallout = true
+                } else {
+                    annotationView?.annotation = poiAnnotation
+                }
+
+                // 根据POI类型和搜刮状态设置样式
+                if poiAnnotation.isScavenged {
+                    // 已搜刮：灰色
+                    annotationView?.markerTintColor = .gray
+                    annotationView?.glyphImage = UIImage(systemName: "checkmark")
+                } else {
+                    // 未搜刮：根据类型设置颜色和图标
+                    annotationView?.markerTintColor = markerColor(for: poiAnnotation.poiType)
+                    annotationView?.glyphImage = UIImage(systemName: poiAnnotation.poiType.iconName)
+                }
+
+                return annotationView
+            }
+
+            return nil
+        }
+
+        /// 根据POI类型获取标记颜色
+        private func markerColor(for type: POIType) -> UIColor {
+            switch type {
+            case .supermarket: return .systemOrange
+            case .hospital: return .systemRed
+            case .pharmacy: return .systemGreen
+            case .gasStation: return .systemBlue
+            case .warehouse: return .systemBrown
+            case .factory: return .systemGray
+            case .residence: return .systemTeal
+            case .policeStation: return .systemIndigo
+            }
+        }
+    }
+}
+
+// MARK: - POI Annotation
+
+/// POI标记类
+class POIAnnotation: NSObject, MKAnnotation {
+    let poiId: String
+    let poiType: POIType
+    let poiName: String
+    var isScavenged: Bool
+
+    var coordinate: CLLocationCoordinate2D
+    var title: String? { poiName }
+    var subtitle: String? { poiType.displayName }
+
+    init(poi: POIData, isScavenged: Bool) {
+        self.poiId = poi.id
+        self.poiType = poi.type
+        self.poiName = poi.name
+        self.coordinate = poi.coordinate
+        self.isScavenged = isScavenged
+        super.init()
     }
 }
 
