@@ -54,6 +54,14 @@ class ExplorationManager: NSObject, ObservableObject {
     /// 是否正在搜索POI
     @Published var isSearchingPOIs: Bool = false
 
+    // MARK: - 多人密度相关属性
+
+    /// 附近幸存者数量
+    @Published var nearbyPlayerCount: Int = 0
+
+    /// 当前密度等级
+    @Published var currentDensityLevel: PlayerDensityLevel = .alone
+
     /// 当前接近的POI（触发弹窗）
     @Published var currentProximityPOI: POIData?
 
@@ -175,6 +183,13 @@ class ExplorationManager: NSObject, ObservableObject {
         showScavengeResult = false
         scavengeRewards = []
 
+        // 重置密度状态
+        nearbyPlayerCount = 0
+        currentDensityLevel = .alone
+
+        // 启动玩家位置上报
+        PlayerLocationManager.shared.startReporting()
+
         // 启动计时器
         durationTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -276,6 +291,9 @@ class ExplorationManager: NSObject, ObservableObject {
         // 清除POI数据和围栏
         clearPOIs()
 
+        // 停止玩家位置上报
+        PlayerLocationManager.shared.stopReporting()
+
         // 重置状态
         isExploring = false
 
@@ -291,6 +309,9 @@ class ExplorationManager: NSObject, ObservableObject {
 
         // 清除POI数据和围栏
         clearPOIs()
+
+        // 停止玩家位置上报
+        PlayerLocationManager.shared.stopReporting()
 
         explorationFailed = true
         failureReason = reason
@@ -653,13 +674,41 @@ class ExplorationManager: NSObject, ObservableObject {
         isSearchingPOIs = true
         log("========== 开始搜索附近POI ==========", type: .info)
 
-        // 搜索POI
+        // ⭐ 1. 先查询附近玩家密度，获取POI显示建议
+        let suggestion = await PlayerLocationManager.shared.getPOISuggestion(
+            latitude: userLocation.latitude,
+            longitude: userLocation.longitude
+        )
+
+        // 更新密度状态
+        nearbyPlayerCount = suggestion.nearbyCount
+        currentDensityLevel = suggestion.densityLevel
+
+        log("附近幸存者: \(suggestion.nearbyCount)人", type: .info)
+        log("密度等级: \(suggestion.densityLevel.displayName)", type: .info)
+        log("建议POI数: \(suggestion.suggestedPOICount)", type: .info)
+
+        // ⭐ 2. 搜索POI
         var pois = await POISearchManager.shared.searchNearbyPOIs(center: userLocation)
 
         // ⭐ 添加虚拟测试POI（在用户位置附近20米处）
         let testPOI = createTestPOI(near: userLocation)
         pois.insert(testPOI, at: 0)  // 放在列表最前面
-        log("✅ 已添加测试超市POI: \(testPOI.name)", type: .success)
+        log("已添加测试超市POI: \(testPOI.name)", type: .success)
+
+        // ⭐ 3. 根据密度等级限制POI数量
+        let maxPOICount = suggestion.suggestedPOICount
+        if pois.count > maxPOICount {
+            // 按距离排序，取最近的N个
+            let sortedPOIs = pois.sorted { poi1, poi2 in
+                let loc1 = CLLocation(latitude: poi1.coordinate.latitude, longitude: poi1.coordinate.longitude)
+                let loc2 = CLLocation(latitude: poi2.coordinate.latitude, longitude: poi2.coordinate.longitude)
+                let userLoc = CLLocation(latitude: userLocation.latitude, longitude: userLocation.longitude)
+                return loc1.distance(from: userLoc) < loc2.distance(from: userLoc)
+            }
+            pois = Array(sortedPOIs.prefix(maxPOICount))
+            log("根据密度限制POI数量: \(pois.count)个", type: .info)
+        }
 
         nearbyPOIs = pois
 

@@ -261,6 +261,11 @@ struct MapTabView: View {
             }
 
             Spacer()
+
+            // 探索时显示附近幸存者数量
+            if explorationManager.isExploring {
+                nearbySurvivorsBadge
+            }
         }
         .padding()
         .background(
@@ -268,6 +273,49 @@ struct MapTabView: View {
                 .opacity(0.9)
                 .blur(radius: 10)
         )
+    }
+
+    /// 附近幸存者徽章
+    private var nearbySurvivorsBadge: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "person.2.fill")
+                .font(.system(size: 14))
+                .foregroundColor(densityLevelColor)
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(explorationManager.nearbyPlayerCount)")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(ApocalypseTheme.textPrimary)
+
+                Text(explorationManager.currentDensityLevel.displayName)
+                    .font(.system(size: 10))
+                    .foregroundColor(densityLevelColor)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(densityLevelColor.opacity(0.15))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(densityLevelColor.opacity(0.3), lineWidth: 1)
+                )
+        )
+    }
+
+    /// 密度等级对应的颜色
+    private var densityLevelColor: Color {
+        switch explorationManager.currentDensityLevel {
+        case .alone:
+            return .gray
+        case .low:
+            return .blue
+        case .medium:
+            return .orange
+        case .high:
+            return .green
+        }
     }
 
     /// 速度警告横幅（小型样式）
