@@ -179,6 +179,71 @@ class InventoryManager: ObservableObject {
         }
     }
 
+    /// 添加 AI 生成的物品到背包
+    /// - Parameter items: AI 生成的物品列表
+    func addAIItems(_ items: [ScavengeRewardItem]) async throws {
+        guard !items.isEmpty else {
+            log("AI物品列表为空，跳过添加", type: .info)
+            return
+        }
+
+        log("========== 开始添加AI物品到背包 ==========", type: .info)
+        log("待添加AI物品数量: \(items.count)", type: .info)
+
+        do {
+            guard let userId = try? await supabase.auth.session.user.id else {
+                log("获取用户ID失败", type: .error)
+                throw InventoryError.userNotFound
+            }
+            log("用户ID: \(userId.uuidString)", type: .success)
+
+            for item in items {
+                // AI 物品直接作为新记录插入（每个都是独特的）
+                struct AIItemInsert: Encodable {
+                    let user_id: String
+                    let item_id: String           // 使用 UUID 作为唯一标识
+                    let item_name: String         // AI 生成的名称
+                    let category: String          // 分类
+                    let rarity: String            // 稀有度
+                    let story: String             // 背景故事
+                    let quantity: Int
+                    let is_ai_generated: Bool
+                    let obtained_at: String
+                }
+
+                let newItem = AIItemInsert(
+                    user_id: userId.uuidString,
+                    item_id: item.id,
+                    item_name: item.name,
+                    category: item.category,
+                    rarity: item.rarity.rawValue,
+                    story: item.story,
+                    quantity: item.quantity,
+                    is_ai_generated: item.isAIGenerated,
+                    obtained_at: ISO8601DateFormatter().string(from: Date())
+                )
+
+                log("插入AI物品: \(item.name) [\(item.rarity.displayName)]", type: .info)
+
+                try await supabase
+                    .from("inventory_items")
+                    .insert(newItem)
+                    .execute()
+
+                log("AI物品已添加: \(item.name)", type: .success)
+            }
+
+            // 重新加载背包
+            try await loadInventory()
+
+            log("========== AI物品添加完成 ==========", type: .success)
+        } catch {
+            log("========== 添加AI物品失败 ==========", type: .error)
+            log("错误: \(error)", type: .error)
+            throw error
+        }
+    }
+
     /// 移除物品
     /// - Parameters:
     ///   - itemId: 物品ID

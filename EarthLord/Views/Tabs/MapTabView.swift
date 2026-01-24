@@ -170,15 +170,38 @@ struct MapTabView: View {
                 .zIndex(11)
             }
 
+            // AI 物品生成加载状态
+            if explorationManager.isGeneratingAIItems {
+                Color.black.opacity(0.6)
+                    .ignoresSafeArea()
+                    .zIndex(12)
+
+                VStack(spacing: 16) {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(1.5)
+
+                    Text("AI 正在生成物品...")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white)
+                }
+                .padding(40)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(ApocalypseTheme.cardBackground)
+                )
+                .zIndex(13)
+            }
+
             // 搜刮结果弹窗
             if explorationManager.showScavengeResult, let poi = explorationManager.currentProximityPOI {
                 Color.black.opacity(0.5)
                     .ignoresSafeArea()
                     .zIndex(12)
 
-                ScavengeResultView(
+                AIScavengeResultView(
                     poi: poi,
-                    rewards: explorationManager.scavengeRewards,
+                    rewards: explorationManager.aiScavengeRewards,
                     onConfirm: {
                         explorationManager.dismissScavengeResult()
                     }

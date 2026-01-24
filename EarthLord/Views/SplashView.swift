@@ -157,15 +157,25 @@ struct SplashView: View {
         Task {
             print("🔵 [SplashView] simulateLoading 开始")
 
-            // 等待 AuthManager 完成会话检查（它在 init 时已经调用了 checkSession）
+            // 等待 AuthManager 完成会话检查
             await MainActor.run {
                 loadingText = "正在检查登录状态..."
             }
 
-            print("⏰ [SplashView] 等待会话检查完成（1秒）")
-            // 给 AuthManager 的 checkSession 一点时间完成
-            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1秒
-            print("✅ [SplashView] 等待完成")
+            print("⏰ [SplashView] 等待 AuthManager 会话检查完成...")
+
+            // 等待会话检查完成（最多等待 10 秒）
+            var waitCount = 0
+            while !authManager.isSessionChecked && waitCount < 100 {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1秒
+                waitCount += 1
+            }
+
+            if authManager.isSessionChecked {
+                print("✅ [SplashView] 会话检查已完成")
+            } else {
+                print("⚠️ [SplashView] 会话检查超时，继续加载")
+            }
 
             // 显示准备就绪
             await MainActor.run {
@@ -180,7 +190,7 @@ struct SplashView: View {
 
             // 完成加载，进入主界面
             await MainActor.run {
-                print("🎯 [SplashView] 准备设置 isFinished = true")
+                print("🎯 [SplashView] 准备设置 isFinished = true, isAuthenticated = \(authManager.isAuthenticated)")
                 withAnimation(.easeInOut(duration: 0.3)) {
                     isFinished = true
                 }

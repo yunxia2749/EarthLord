@@ -12,7 +12,7 @@ import Supabase
 // 注意：SDK 默认使用 KeychainLocalStorage 持久化 session
 let supabase = SupabaseClient(
     supabaseURL: URL(string: "https://kmfuiegtfpqvcfkfzfzw.supabase.co")!,
-    supabaseKey: "sb_publishable_8TcGR_ajCs6TwukKADIzcQ_1OUMhERM"
+    supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImttZnVpZWd0ZnBxdmNma2Z6Znp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyODY5NzQsImV4cCI6MjA4MDg2Mjk3NH0.0oZO4yvB_KBdbcYiuGbqWZ37dzraURZNaGFpY4w2JmI"
 )
 
 struct SupabaseTestView: View {

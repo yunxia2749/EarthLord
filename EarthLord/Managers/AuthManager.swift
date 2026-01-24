@@ -20,6 +20,9 @@ class AuthManager: ObservableObject {
     /// 用户是否已完全认证（登录且完成所有必要流程）
     @Published var isAuthenticated: Bool = false  // 恢复正常登录
 
+    /// 会话检查是否已完成（用于 SplashView 等待）
+    @Published var isSessionChecked: Bool = false
+
     /// 是否需要设置密码（OTP 验证后的必要步骤）
     @Published var needsPasswordSetup: Bool = false
 
@@ -564,6 +567,8 @@ class AuthManager: ObservableObject {
         }
 
         isLoading = false
+        isSessionChecked = true
+        print("✅ [Auth] 会话检查完成，isSessionChecked = true")
     }
 
     /// 超时错误

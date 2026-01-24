@@ -33,3 +33,16 @@ credentials.json
 .DS_Store
 .AppleDouble
 .LSOverride
+
+# Backup files
+*.backup_*
+
+# Xcode user data
+xcuserdata/
+
+# Temporary files
+.temp/
+
+# Scripts (optional)
+add_file_to_xcode.py
+add_url_scheme.sh

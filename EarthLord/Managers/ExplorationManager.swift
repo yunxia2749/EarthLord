@@ -71,8 +71,14 @@ class ExplorationManager: NSObject, ObservableObject {
     /// 是否显示搜刮结果
     @Published var showScavengeResult: Bool = false
 
-    /// 搜刮获得的物品
+    /// 搜刮获得的物品（旧版，保留向后兼容）
     @Published var scavengeRewards: [RewardItem] = []
+
+    /// AI 生成的搜刮物品
+    @Published var aiScavengeRewards: [ScavengeRewardItem] = []
+
+    /// 是否正在生成 AI 物品
+    @Published var isGeneratingAIItems: Bool = false
 
     /// 已搜刮的POI ID集合
     @Published var scavengedPOIIds: Set<String> = []
@@ -723,10 +729,10 @@ class ExplorationManager: NSObject, ObservableObject {
 
     /// 创建测试用虚拟POI（在用户当前位置，立即可触发）
     private func createTestPOI(near userLocation: CLLocationCoordinate2D) -> POIData {
-        // ⭐ 直接放在用户当前位置（偏移约5米，确保立即触发）
-        // 1度纬度约111公里，5米 ≈ 0.000045度
-        let offsetLat = 0.00004  // 约4米北
-        let offsetLng = 0.00004  // 约4米东
+        // ⭐ 直接放在用户当前位置（偏移极小，室内也能立即触发）
+        // 改为0.5米偏移，GPS稍微有一点抖动就能触发
+        let offsetLat = 0.000005  // 约0.5米北
+        let offsetLng = 0.000005  // 约0.5米东
 
         let testCoordinate = CLLocationCoordinate2D(
             latitude: userLocation.latitude + offsetLat,
@@ -819,23 +825,31 @@ class ExplorationManager: NSObject, ObservableObject {
     /// - Parameter poi: 要搜刮的POI
     func scavengePOI(_ poi: POIData) async {
         log("========== 开始搜刮POI ==========", type: .info)
-        log("POI: \(poi.name) (类型: \(poi.type.displayName))", type: .info)
+        log("POI: \(poi.name) (类型: \(poi.type.displayName), 危险等级: \(poi.dangerLevel))", type: .info)
 
         // 标记为已搜刮
         scavengedPOIIds.insert(poi.id)
 
-        // 生成搜刮物品（复用RewardGenerator的物品池）
-        let rewards = generateScavengeRewards(for: poi)
-        scavengeRewards = rewards
+        // 显示加载状态
+        isGeneratingAIItems = true
+
+        // 计算物品数量（基于危险等级）
+        let itemCount = calculateItemCount(for: poi)
+
+        // 调用 AI 生成物品
+        let rewards = await AIItemGenerator.shared.generateItems(for: poi, count: itemCount)
+        aiScavengeRewards = rewards
+
+        isGeneratingAIItems = false
 
         log("生成 \(rewards.count) 个物品:", type: .success)
         for reward in rewards {
-            log("  - \(reward.itemId) x\(reward.quantity)", type: .info)
+            log("  - [\(reward.rarity.displayName)] \(reward.name)", type: .info)
         }
 
-        // 添加到背包
+        // 添加到背包（使用新的 AI 物品格式）
         do {
-            try await InventoryManager.shared.addItems(rewards)
+            try await InventoryManager.shared.addAIItems(rewards)
             log("物品已添加到背包", type: .success)
         } catch {
             log("添加物品到背包失败: \(error.localizedDescription)", type: .error)
@@ -848,38 +862,14 @@ class ExplorationManager: NSObject, ObservableObject {
         log("========== 搜刮完成 ==========", type: .success)
     }
 
-    /// 生成搜刮奖励
-    private func generateScavengeRewards(for poi: POIData) -> [RewardItem] {
-        // 随机生成1-3个物品
-        let itemCount = Int.random(in: 1...3)
-        var rewards: [RewardItem] = []
-
-        // 根据POI类型使用不同的物品池（Day22简化版：使用通用池）
-        let itemPool = getItemPool(for: poi.type)
-
-        for _ in 0..<itemCount {
-            if let itemId = itemPool.randomElement() {
-                let quantity = Int.random(in: 1...2)
-                rewards.append(RewardItem(itemId: itemId, quantity: quantity))
-            }
-        }
-
-        return rewards
-    }
-
-    /// 获取POI类型对应的物品池
-    private func getItemPool(for poiType: POIType) -> [String] {
-        // Day22简化版：所有类型使用相同的通用物品池
-        // 后续可以根据类型返回不同物品池
-        switch poiType {
-        case .supermarket:
-            return ["item_water_bottle", "item_canned_food", "item_bandage"]
-        case .hospital, .pharmacy:
-            return ["item_medicine", "item_bandage", "item_first_aid_kit"]
-        case .gasStation:
-            return ["item_flashlight", "item_rope", "item_scrap_metal"]
-        default:
-            return ["item_water_bottle", "item_canned_food", "item_bandage", "item_wood", "item_rope"]
+    /// 计算物品数量（基于POI危险等级）
+    private func calculateItemCount(for poi: POIData) -> Int {
+        switch poi.dangerLevel {
+        case 1, 2: return Int.random(in: 1...2)
+        case 3: return Int.random(in: 2...3)
+        case 4: return Int.random(in: 2...4)
+        case 5: return Int.random(in: 3...5)
+        default: return 2
         }
     }
 
@@ -887,6 +877,7 @@ class ExplorationManager: NSObject, ObservableObject {
     func dismissScavengeResult() {
         showScavengeResult = false
         scavengeRewards = []
+        aiScavengeRewards = []
         currentProximityPOI = nil
     }
 
