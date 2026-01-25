@@ -8,8 +8,6 @@
 import SwiftUI
 
 struct MoreTabView: View {
-    /// 定位管理器（从父视图注入，传递给子视图）
-    @EnvironmentObject var locationManager: LocationManager
 
     var body: some View {
         NavigationView {
@@ -19,25 +17,8 @@ struct MoreTabView: View {
 
                 ScrollView {
                     VStack(spacing: 0) {
-                        // 开发工具部分
-                        SectionHeader(title: "开发工具")
-
-                        VStack(spacing: 0) {
-                            NavigationLink(destination: TestMenuView().environmentObject(locationManager)) {
-                                MoreMenuItem(
-                                    icon: "hammer.fill",
-                                    title: "开发测试",
-                                    subtitle: "功能测试和调试工具",
-                                    iconColor: ApocalypseTheme.info
-                                )
-                            }
-                        }
-                        .background(ApocalypseTheme.cardBackground)
-                        .cornerRadius(12)
-                        .padding(.horizontal)
-
-                        // 占位：其他功能区域
-                        SectionHeader(title: "游戏功能")
+                        // 功能区域
+                        SectionHeader(title: "功能")
 
                         VStack(spacing: 0) {
                             MoreMenuItem(

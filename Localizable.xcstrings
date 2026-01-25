@@ -273,6 +273,7 @@
 
     },
     "切换 App 显示语言" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -784,7 +785,11 @@
         }
       }
     },
+    "语言" : {
+
+    },
     "语言设置" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
