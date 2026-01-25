@@ -600,9 +600,9 @@ struct ProfileTabView: View {
     /// 获取当前语言名称
     /// - Returns: 当前语言的中文名称
     private func currentLanguageName() -> String {
-        let languageCode = Locale.current.language.languageCode?.identifier ?? "zh"
+        let languageCode = Locale.current.languageCode ?? "zh"
         switch languageCode {
-        case "zh":
+        case "zh", "zh-Hans", "zh-CN":
             return "简体中文"
         case "en":
             return "English"
