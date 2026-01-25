@@ -474,16 +474,6 @@ struct AuthView: View {
 
             // 第三方登录按钮
             VStack(spacing: 12) {
-                // Apple 登录
-                ThirdPartyButton(
-                    title: "使用 Apple 登录",
-                    icon: "applelogo",
-                    backgroundColor: .black,
-                    action: {
-                        showToastMessage("Apple 登录即将开放")
-                    }
-                )
-
                 // Google 登录
                 ThirdPartyButton(
                     title: "使用 Google 登录",
