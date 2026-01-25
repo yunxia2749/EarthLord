@@ -33,54 +33,58 @@ struct ProfileTabView: View {
     // MARK: - Body
 
     var body: some View {
-        ZStack {
-            // 背景渐变
-            backgroundGradient
+        NavigationView {
+            ZStack {
+                // 背景渐变
+                backgroundGradient
 
-            ScrollView {
-                VStack(spacing: 32) {
-                    // 顶部间距
-                    Spacer().frame(height: 20)
+                ScrollView {
+                    VStack(spacing: 32) {
+                        // 顶部间距
+                        Spacer().frame(height: 20)
 
-                    // 用户信息卡片
-                    userInfoCard
+                        // 用户信息卡片
+                        userInfoCard
 
-                    // 设置选项
-                    settingsSection
+                        // 设置选项
+                        settingsSection
 
-                    // 退出登录按钮
-                    logoutButton
+                        // 退出登录按钮
+                        logoutButton
 
-                    // 危险区域
-                    dangerZoneSection
+                        // 危险区域
+                        dangerZoneSection
 
-                    Spacer()
+                        Spacer()
+                    }
+                    .padding(.horizontal, 24)
                 }
-                .padding(.horizontal, 24)
-            }
 
-            // Toast 提示
-            if showToast {
-                toastView
-            }
+                // Toast 提示
+                if showToast {
+                    toastView
+                }
 
-            // 加载指示器
-            if authManager.isLoading {
-                loadingOverlay
-            }
-        }
-        .confirmationDialog("确认退出", isPresented: $showLogoutConfirmation) {
-            Button("退出登录", role: .destructive) {
-                Task {
-                    await performLogout()
+                // 加载指示器
+                if authManager.isLoading {
+                    loadingOverlay
                 }
             }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("确定要退出登录吗？")
-        }
-        .sheet(isPresented: $showDeleteConfirmation) {
-            deleteAccountSheet
+            .navigationTitle("个人")
+            .navigationBarTitleDisplayMode(.large)
+            .confirmationDialog("确认退出", isPresented: $showLogoutConfirmation) {
+                Button("退出登录", role: .destructive) {
+                    Task {
+                        await performLogout()
+                    }
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("确定要退出登录吗？")
+            }
+            .sheet(isPresented: $showDeleteConfirmation) {
+                deleteAccountSheet
+            }
         }
     }
 
@@ -191,8 +195,36 @@ struct ProfileTabView: View {
                     icon: "calendar",
                     title: "注册时间",
                     value: formatDate(authManager.currentUser?.createdAt),
-                    showDivider: false
+                    showDivider: true
                 )
+
+                // 语言设置（可点击）
+                NavigationLink(destination: LanguageSettingsView()) {
+                    HStack(spacing: 16) {
+                        // 图标
+                        Image(systemName: "globe")
+                            .foregroundColor(ApocalypseTheme.primary)
+                            .frame(width: 24)
+
+                        // 标题
+                        Text("语言")
+                            .foregroundColor(ApocalypseTheme.textSecondary)
+
+                        Spacer()
+
+                        // 当前语言
+                        Text(currentLanguageName())
+                            .foregroundColor(ApocalypseTheme.textPrimary)
+
+                        // 箭头
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(ApocalypseTheme.textMuted)
+                    }
+                    .padding()
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PlainButtonStyle())
             }
             .background(
                 RoundedRectangle(cornerRadius: 16)
@@ -563,6 +595,20 @@ struct ProfileTabView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy年MM月dd日"
         return formatter.string(from: date)
+    }
+
+    /// 获取当前语言名称
+    /// - Returns: 当前语言的中文名称
+    private func currentLanguageName() -> String {
+        let languageCode = Locale.current.language.languageCode?.identifier ?? "zh"
+        switch languageCode {
+        case "zh":
+            return "简体中文"
+        case "en":
+            return "English"
+        default:
+            return "简体中文"
+        }
     }
 }
 

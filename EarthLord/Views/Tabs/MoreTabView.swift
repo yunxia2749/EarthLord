@@ -40,19 +40,6 @@ struct MoreTabView: View {
                         SectionHeader(title: "游戏功能")
 
                         VStack(spacing: 0) {
-                            NavigationLink(destination: LanguageSettingsView()) {
-                                MoreMenuItem(
-                                    icon: "globe",
-                                    title: "语言设置",
-                                    subtitle: "切换 App 显示语言",
-                                    iconColor: ApocalypseTheme.primary
-                                )
-                            }
-
-                            Divider()
-                                .background(ApocalypseTheme.background)
-                                .padding(.leading, 60)
-
                             MoreMenuItem(
                                 icon: "gearshape.fill",
                                 title: "设置",
