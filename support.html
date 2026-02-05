@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>技术支持 - 地球新主</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #ffffff;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .back-link {
+            display: inline-block;
+            color: #e94560;
+            text-decoration: none;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+            color: #e94560;
+        }
+        .subtitle {
+            color: #8892b0;
+        }
+        .content {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #e94560;
+            margin: 25px 0 15px 0;
+            font-size: 1.3em;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(233, 69, 96, 0.3);
+        }
+        h2:first-child {
+            margin-top: 0;
+        }
+        p {
+            line-height: 1.8;
+            color: #ccd6f6;
+            margin-bottom: 15px;
+        }
+        .contact-box {
+            background: rgba(233, 69, 96, 0.1);
+            border-radius: 12px;
+            padding: 25px;
+            text-align: center;
+            border: 1px solid rgba(233, 69, 96, 0.3);
+            margin-bottom: 30px;
+        }
+        .contact-box h2 {
+            border: none;
+            margin: 0 0 15px 0;
+            padding: 0;
+        }
+        .email-link {
+            display: inline-block;
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #e94560 0%, #ff6b6b 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1.1em;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .email-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(233, 69, 96, 0.3);
+        }
+        .faq-item {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .faq-item h3 {
+            color: #ff6b6b;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        .faq-item p {
+            margin-bottom: 0;
+            color: #a8b2d1;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .info-card {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .info-card .icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        .info-card h4 {
+            color: #e94560;
+            margin-bottom: 5px;
+        }
+        .info-card p {
+            color: #8892b0;
+            font-size: 0.9em;
+            margin: 0;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: #8892b0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <a href="index.html" class="back-link">← 返回首页</a>
+            <h1>技术支持</h1>
+            <p class="subtitle">我们随时为您提供帮助</p>
+        </header>
+
+        <div class="contact-box">
+            <h2>联系我们</h2>
+            <p>如果您在使用过程中遇到任何问题，请通过邮件联系我们的技术支持团队：</p>
+            <a href="mailto:earthlord@example.com" class="email-link">📧 earthlord@example.com</a>
+            <p style="margin-top: 15px; font-size: 0.9em; color: #8892b0;">我们将在24小时内回复您的邮件</p>
+        </div>
+
+        <div class="content">
+            <h2>常见问题</h2>
+
+            <div class="faq-item">
+                <h3>Q: 为什么需要开启位置权限？</h3>
+                <p>A: 《地球新主》是一款基于真实位置的探索游戏。位置权限用于实现探索、圈地、发现POI等核心功能。您可以在使用时选择"仅在使用期间允许"来保护隐私。</p>
+            </div>
+
+            <div class="faq-item">
+                <h3>Q: 游戏很耗电怎么办？</h3>
+                <p>A: 由于游戏需要持续获取位置信息，会消耗一定电量。建议在探索时确保电量充足，或携带充电宝。我们也在持续优化电量消耗。</p>
+            </div>
+
+            <div class="faq-item">
+                <h3>Q: 为什么位置不准确？</h3>
+                <p>A: 位置精度受多种因素影响，如GPS信号、网络状况、周围建筑物等。建议在开阔地带使用以获得最佳体验。室内或地下可能会影响定位精度。</p>
+            </div>
+
+            <div class="faq-item">
+                <h3>Q: 如何保护我的账号安全？</h3>
+                <p>A: 请设置强密码，不要与他人共享账号信息。如果发现账号异常，请立即联系我们的技术支持团队。</p>
+            </div>
+
+            <div class="faq-item">
+                <h3>Q: 游戏数据会丢失吗？</h3>
+                <p>A: 您的游戏数据会自动同步到云端服务器，只要使用同一账号登录即可恢复所有数据。</p>
+            </div>
+
+            <div class="faq-item">
+                <h3>Q: 如何删除我的账号？</h3>
+                <p>A: 如需删除账号，请发送邮件至 earthlord@example.com，注明您的注册邮箱，我们将在收到请求后7个工作日内处理。</p>
+            </div>
+        </div>
+
+        <div class="content">
+            <h2>系统要求</h2>
+            <div class="info-grid">
+                <div class="info-card">
+                    <div class="icon">📱</div>
+                    <h4>iOS 版本</h4>
+                    <p>iOS 15.0 或更高版本</p>
+                </div>
+                <div class="info-card">
+                    <div class="icon">📍</div>
+                    <h4>位置服务</h4>
+                    <p>需要开启GPS定位</p>
+                </div>
+                <div class="info-card">
+                    <div class="icon">🌐</div>
+                    <h4>网络连接</h4>
+                    <p>需要网络连接</p>
+                </div>
+                <div class="info-card">
+                    <div class="icon">💾</div>
+                    <h4>存储空间</h4>
+                    <p>至少100MB可用空间</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="content">
+            <h2>反馈建议</h2>
+            <p>我们非常重视用户的反馈和建议。如果您有任何想法可以让游戏变得更好，欢迎通过邮件告诉我们！</p>
+            <p>反馈时请尽量包含以下信息：</p>
+            <ul style="margin: 15px 0; padding-left: 25px; color: #ccd6f6;">
+                <li>您的设备型号和iOS版本</li>
+                <li>问题的详细描述</li>
+                <li>问题发生的时间和场景</li>
+                <li>如有可能，请附上截图</li>
+            </ul>
+        </div>
+
+        <footer class="footer">
+            <p>&copy; 2024-2026 地球新主 Earth Lord. All rights reserved.</p>
+        </footer>
+    </div>
+</body>
+</html>

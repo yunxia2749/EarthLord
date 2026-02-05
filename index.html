@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地球新主 - Earth Lord</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #ffffff;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .logo {
+            width: 120px;
+            height: 120px;
+            background: linear-gradient(135deg, #e94560 0%, #ff6b6b 100%);
+            border-radius: 24px;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+        }
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #e94560, #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .subtitle {
+            color: #8892b0;
+            font-size: 1.2em;
+        }
+        .description {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .description h2 {
+            color: #e94560;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+        .description p {
+            line-height: 1.8;
+            color: #ccd6f6;
+            margin-bottom: 15px;
+        }
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .feature {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .feature-icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        .feature h3 {
+            color: #e94560;
+            margin-bottom: 8px;
+        }
+        .feature p {
+            color: #8892b0;
+            font-size: 0.9em;
+        }
+        .links {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .link-btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #e94560 0%, #ff6b6b 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .link-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(233, 69, 96, 0.3);
+        }
+        .link-btn.secondary {
+            background: transparent;
+            border: 2px solid #e94560;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 30px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: #8892b0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">🌍</div>
+            <h1>地球新主</h1>
+            <p class="subtitle">EARTH LORD</p>
+        </header>
+
+        <section class="description">
+            <h2>关于游戏</h2>
+            <p>《地球新主》是一款创新的真实世界探索游戏。在末日世界背景下，玩家通过真实行走探索世界、圈占领地、收集资源，与神兽伙伴一起成为地球的新主人。</p>
+            <p>游戏融合了GPS定位、地图探索、领地争夺等多种玩法，让您在日常出行中体验独特的游戏乐趣。</p>
+        </section>
+
+        <section class="features">
+            <div class="feature">
+                <div class="feature-icon">🗺️</div>
+                <h3>真实探索</h3>
+                <p>基于GPS定位的真实世界探索体验</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">🏰</div>
+                <h3>领地圈占</h3>
+                <p>行走圈地，建立属于你的领地</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">🐉</div>
+                <h3>神兽伙伴</h3>
+                <p>培养专属神兽，解锁强力技能</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">🎒</div>
+                <h3>资源收集</h3>
+                <p>探索POI点位，收集珍贵物资</p>
+            </div>
+        </section>
+
+        <div class="links">
+            <a href="support.html" class="link-btn">技术支持</a>
+            <a href="privacy.html" class="link-btn secondary">隐私政策</a>
+        </div>
+
+        <footer class="footer">
+            <p>&copy; 2024-2026 地球新主 Earth Lord. All rights reserved.</p>
+            <p style="margin-top: 10px;">联系邮箱：earthlord@example.com</p>
+        </footer>
+    </div>
+</body>
+</html>
